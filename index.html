@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://query1.finance.yahoo.com https://query2.finance.yahoo.com https://api.allorigins.win https://corsproxy.io https://api.codetabs.com; base-uri 'none'; form-action 'none';" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://query1.finance.yahoo.com https://query2.finance.yahoo.com https://api.allorigins.win https://corsproxy.io https://api.codetabs.com https://firestore.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebaseinstallations.googleapis.com; base-uri 'none'; form-action 'none';" />
 <title>かんたん家計簿</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icons/icon-192.png" type="image/png" />
@@ -14,6 +14,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="家計簿" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg: #f5f7fa;
@@ -96,7 +99,7 @@
     form { grid-template-columns: 120px 120px 140px 90px 1fr 120px auto; align-items: end; }
   }
   label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
-  input, select, button {
+  input, select, button, textarea {
     font-size: 14px;
     padding: 8px 10px;
     border: 1px solid var(--border);
@@ -105,6 +108,7 @@
     width: 100%;
     font-family: inherit;
   }
+  textarea { resize: vertical; }
   input:focus, select:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
   button.primary {
     background: var(--primary);
@@ -855,6 +859,7 @@
     <button id="next-month" aria-label="次の月">›</button>
   </div>
   <div class="tools">
+    <button id="sync-btn">☁ 同期<span id="sync-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#cbd5e1;margin-left:6px;"></span></button>
     <button id="export-btn">エクスポート</button>
     <button id="import-btn">インポート</button>
     <input type="file" id="import-file" accept="application/json" style="display:none" />
@@ -1390,6 +1395,28 @@
   </div>
 </div>
 
+<div id="sync-overlay" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h2>クラウド同期 (Firebase)</h2>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Firebaseプロジェクトを作成し、Firestoreとメール/パスワード認証を有効にしてください。同じメールアドレスでログインした端末同士が自動で同期されます。</p>
+    <div class="modal-body">
+      <label for="sync-config">Firebase設定 (firebaseConfig をそのまま貼り付け)</label>
+      <textarea id="sync-config" rows="5" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}'></textarea>
+      <label for="sync-email">メールアドレス</label>
+      <input type="email" id="sync-email" placeholder="you@example.com" autocomplete="username" />
+      <label for="sync-password">パスワード</label>
+      <input type="password" id="sync-password" placeholder="6文字以上" autocomplete="current-password" />
+      <div id="sync-status" style="font-size:12px;margin-top:8px;color:var(--muted);">未接続</div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" id="sync-cancel">閉じる</button>
+      <button type="button" id="sync-signout">ログアウト</button>
+      <button type="button" id="sync-signup">新規登録</button>
+      <button type="button" class="primary" id="sync-signin">接続 / ログイン</button>
+    </div>
+  </div>
+</div>
+
 <div id="undo-toast" class="undo-toast" style="display:none">
   <span id="undo-toast-msg"></span>
   <button type="button" id="undo-toast-btn">元に戻す</button>
@@ -1434,7 +1461,7 @@
       if (raw && typeof raw === 'object') classifyRules = raw;
     } catch {}
   }
-  function saveClassifyRules() { localStorage.setItem(CLASSIFY_RULES_KEY, JSON.stringify(classifyRules)); }
+  function saveClassifyRules() { localStorage.setItem(CLASSIFY_RULES_KEY, JSON.stringify(classifyRules)); scheduleCloudPush(); }
   function classifyMerchant(memo) {
     if (!memo) return 'その他';
     // user-defined rules take priority (longest keyword first for specificity)
@@ -1504,7 +1531,7 @@
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
     catch { return []; }
   }
-  function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
+  function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); scheduleCloudPush(); }
   function migrateUsers() {
     let changed = false;
     const CAT_RENAME = { '給与(自分)': '給与(K)', '給与(妻)': '給与(C)' };
@@ -1531,7 +1558,7 @@
     try { return JSON.parse(localStorage.getItem(BUDGET_KEY)) || {}; }
     catch { return {}; }
   }
-  function saveBudgets() { localStorage.setItem(BUDGET_KEY, JSON.stringify(budgets)); }
+  function saveBudgets() { localStorage.setItem(BUDGET_KEY, JSON.stringify(budgets)); scheduleCloudPush(); }
   function fmt(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
   function ym(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
   function monthLabel(d) { return d.getFullYear() + '年 ' + (d.getMonth() + 1) + '月'; }
@@ -2339,8 +2366,8 @@
     else if (e.key === 'ArrowRight') { viewMonth.setMonth(viewMonth.getMonth() + 1); render(); }
   });
 
-  document.getElementById('export-btn').addEventListener('click', () => {
-    const payload = {
+  function buildBackupPayload() {
+    return {
       app: 'kakeibo',
       version: 2,
       exportedAt: new Date().toISOString(),
@@ -2352,6 +2379,177 @@
       classifyRules,
       ui,
     };
+  }
+
+  function applyFullBackup(data) {
+    const rawEntries = Array.isArray(data.entries) ? data.entries : [];
+    entries = rawEntries.map(sanitizeEntry).filter(Boolean);
+    if (data.budgets && typeof data.budgets === 'object') budgets = sanitizeBudgets(data.budgets);
+    if (data.flow && Array.isArray(data.flow.items) && typeof data.flow.amounts === 'object') flow = data.flow;
+    if (data.assets && Array.isArray(data.assets.accounts)) {
+      assets = data.assets;
+      if (!assets.rates) assets.rates = {};
+      if (!assets.snapshots) assets.snapshots = {};
+    }
+    if (data.portfolio && Array.isArray(data.portfolio.holdings)) { portfolio = data.portfolio; loadPortfolio(); }
+    if (data.classifyRules && typeof data.classifyRules === 'object') classifyRules = data.classifyRules;
+    if (data.ui && typeof data.ui === 'object') {
+      ui.incomeChartOrder = Array.isArray(data.ui.incomeChartOrder) ? data.ui.incomeChartOrder : [];
+      ui.expenseChartOrder = Array.isArray(data.ui.expenseChartOrder) ? data.ui.expenseChartOrder : [];
+      ui.incomeEntryOrder = Array.isArray(data.ui.incomeEntryOrder) ? data.ui.incomeEntryOrder : [];
+    }
+    save(); saveBudgets(); saveFlow(); saveAssets(); saveClassifyRules(); saveUI();
+    migrateUsers();
+  }
+
+  // ---- クラウド同期 (Firebase) ----
+  const SYNC_CONFIG_KEY = 'kakeibo.sync.config.v1';
+  const SYNC_EMAIL_KEY = 'kakeibo.sync.email.v1';
+  let syncAuth = null, syncDb = null, syncUnsub = null;
+  let applyingRemoteSync = false;
+  let cloudPushTimer = null;
+
+  function loadSyncConfig() {
+    try { return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY)) || null; } catch { return null; }
+  }
+  function saveSyncConfig(cfg) { localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(cfg)); }
+
+  function setSyncStatus(text, ok) {
+    const el = document.getElementById('sync-status');
+    if (el) el.textContent = text;
+    const dot = document.getElementById('sync-dot');
+    if (dot) dot.style.background = ok ? '#22c55e' : '#cbd5e1';
+  }
+
+  function parseFirebaseConfig(text) {
+    const cleaned = text.trim()
+      .replace(/^(const|let|var)\s+\w+\s*=\s*/, '')
+      .replace(/;\s*$/, '');
+    // eslint-disable-next-line no-new-func
+    const cfg = new Function('return (' + cleaned + ')')();
+    if (!cfg || !cfg.apiKey || !cfg.projectId) throw new Error('apiKey / projectId が見つかりません');
+    return cfg;
+  }
+
+  function initSyncApp(cfg) {
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    syncAuth = firebase.auth();
+    syncDb = firebase.firestore();
+    syncAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
+    syncAuth.onAuthStateChanged((user) => {
+      if (user) {
+        startSyncListener(user.uid);
+        setSyncStatus(`同期中: ${user.email || user.uid}`, true);
+      } else {
+        stopSyncListener();
+        setSyncStatus('未接続', false);
+      }
+    });
+  }
+
+  function startSyncListener(uid) {
+    stopSyncListener();
+    syncUnsub = syncDb.collection('kakeibo').doc(uid).onSnapshot((snap) => {
+      if (!snap.exists) { pushToCloud(); return; }
+      const data = snap.data();
+      if (!data) return;
+      applyingRemoteSync = true;
+      try { applyFullBackup(data); render(); }
+      finally { applyingRemoteSync = false; }
+    }, (err) => {
+      console.error('sync listen error', err);
+      setSyncStatus('同期エラー: ' + err.message, false);
+    });
+  }
+
+  function stopSyncListener() {
+    if (syncUnsub) { syncUnsub(); syncUnsub = null; }
+  }
+
+  function scheduleCloudPush() {
+    if (applyingRemoteSync) return;
+    if (!syncAuth || !syncAuth.currentUser) return;
+    clearTimeout(cloudPushTimer);
+    cloudPushTimer = setTimeout(pushToCloud, 1000);
+  }
+
+  function pushToCloud() {
+    if (!syncAuth || !syncAuth.currentUser || !syncDb) return;
+    const uid = syncAuth.currentUser.uid;
+    syncDb.collection('kakeibo').doc(uid).set(buildBackupPayload()).catch((err) => {
+      console.error('sync push error', err);
+      setSyncStatus('同期エラー: ' + err.message, false);
+    });
+  }
+
+  (function setupSyncUI() {
+    const overlay = document.getElementById('sync-overlay');
+    const configEl = document.getElementById('sync-config');
+    const emailEl = document.getElementById('sync-email');
+    const passEl = document.getElementById('sync-password');
+
+    const savedCfg = loadSyncConfig();
+    if (savedCfg) {
+      configEl.value = JSON.stringify(savedCfg, null, 2);
+      emailEl.value = localStorage.getItem(SYNC_EMAIL_KEY) || '';
+      try { initSyncApp(savedCfg); } catch (err) { console.error(err); }
+    }
+
+    document.getElementById('sync-btn').addEventListener('click', () => {
+      overlay.style.display = 'flex';
+    });
+    document.getElementById('sync-cancel').addEventListener('click', () => {
+      overlay.style.display = 'none';
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target.id === 'sync-overlay') overlay.style.display = 'none';
+    });
+
+    function connect() {
+      let cfg;
+      try { cfg = parseFirebaseConfig(configEl.value); }
+      catch (err) { alert('Firebase設定の読み取りに失敗しました: ' + err.message); return null; }
+      saveSyncConfig(cfg);
+      try { initSyncApp(cfg); } catch (err) { alert('接続に失敗しました: ' + err.message); return null; }
+      return true;
+    }
+
+    document.getElementById('sync-signin').addEventListener('click', async () => {
+      if (!connect()) return;
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      if (!email || !password) { alert('メールアドレスとパスワードを入力してください'); return; }
+      try {
+        await syncAuth.signInWithEmailAndPassword(email, password);
+        localStorage.setItem(SYNC_EMAIL_KEY, email);
+        passEl.value = '';
+      } catch (err) {
+        alert('ログインに失敗しました: ' + err.message);
+      }
+    });
+
+    document.getElementById('sync-signup').addEventListener('click', async () => {
+      if (!connect()) return;
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      if (!email || !password) { alert('メールアドレスとパスワードを入力してください'); return; }
+      if (!confirm(`新しいアカウント ${email} を作成しますか?\n(2台目以降の端末では代わりに「接続 / ログイン」を使ってください)`)) return;
+      try {
+        await syncAuth.createUserWithEmailAndPassword(email, password);
+        localStorage.setItem(SYNC_EMAIL_KEY, email);
+        passEl.value = '';
+      } catch (err) {
+        alert('登録に失敗しました: ' + err.message);
+      }
+    });
+
+    document.getElementById('sync-signout').addEventListener('click', () => {
+      if (syncAuth) syncAuth.signOut();
+    });
+  })();
+
+  document.getElementById('export-btn').addEventListener('click', () => {
+    const payload = buildBackupPayload();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2379,22 +2577,7 @@
           const msg = `完全バックアップを検出しました (明細${cleanEntries.length}件 + フロー/ストック/設定)。\n\n` +
             `「OK」= すべて上書き復元 / 「キャンセル」= 中止`;
           if (!confirm(msg)) { e.target.value = ''; return; }
-          entries = cleanEntries;
-          if (data.budgets && typeof data.budgets === 'object') budgets = sanitizeBudgets(data.budgets);
-          if (data.flow && Array.isArray(data.flow.items) && typeof data.flow.amounts === 'object') flow = data.flow;
-          if (data.assets && Array.isArray(data.assets.accounts)) {
-            assets = data.assets;
-            if (!assets.rates) assets.rates = {};
-            if (!assets.snapshots) assets.snapshots = {};
-          }
-          if (data.portfolio && Array.isArray(data.portfolio.holdings)) { portfolio = data.portfolio; loadPortfolio(); }
-          if (data.classifyRules && typeof data.classifyRules === 'object') classifyRules = data.classifyRules;
-          if (data.ui && typeof data.ui === 'object') {
-            ui.incomeChartOrder = Array.isArray(data.ui.incomeChartOrder) ? data.ui.incomeChartOrder : [];
-            ui.expenseChartOrder = Array.isArray(data.ui.expenseChartOrder) ? data.ui.expenseChartOrder : [];
-            ui.incomeEntryOrder = Array.isArray(data.ui.incomeEntryOrder) ? data.ui.incomeEntryOrder : [];
-          }
-          save(); saveBudgets(); saveFlow(); saveAssets(); saveClassifyRules(); saveUI();
+          applyFullBackup(data);
           alert('完全バックアップを復元しました');
         } else {
           if (confirm(`${cleanEntries.length}件の明細を読み込みます。既存データに追加しますか? (キャンセルで上書き)`)) {
@@ -2825,7 +3008,7 @@
       }
     } catch {}
   }
-  function saveUI() { localStorage.setItem(UI_KEY, JSON.stringify(ui)); }
+  function saveUI() { localStorage.setItem(UI_KEY, JSON.stringify(ui)); scheduleCloudPush(); }
   function reorderByPref(labels, pref) {
     const set = new Set(labels);
     const ordered = pref.filter(l => set.has(l));
@@ -2864,7 +3047,7 @@
       }
     } catch {}
   }
-  function saveFlow() { localStorage.setItem(FLOW_KEY, JSON.stringify(flow)); }
+  function saveFlow() { localStorage.setItem(FLOW_KEY, JSON.stringify(flow)); scheduleCloudPush(); }
   function flowAmountFor(itemId, monthKey) {
     const m = flow.amounts[monthKey];
     if (m && Number.isFinite(m[itemId])) return m[itemId];
@@ -2929,7 +3112,7 @@
       }
     } catch {}
   }
-  function saveAssets() { localStorage.setItem(ASSETS_KEY, JSON.stringify(assets)); }
+  function saveAssets() { localStorage.setItem(ASSETS_KEY, JSON.stringify(assets)); scheduleCloudPush(); }
 
   function getRate(currency, monthKey) {
     if (currency === 'JPY') return 1;
@@ -3437,7 +3620,7 @@
       delete h.dividendPerShare;
     }
   }
-  function savePortfolio() { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); }
+  function savePortfolio() { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); scheduleCloudPush(); }
 
   function addHolding(name, ticker, currency, shares, cost) {
     if (!name || !name.trim()) return;

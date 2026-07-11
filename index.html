@@ -2444,10 +2444,19 @@
 
   function parseFirebaseConfig(text) {
     const cleaned = text.trim()
-      .replace(/^(const|let|var)\s+\w+\s*=\s*/, '')
+      .replace(/^(export\s+)?(const|let|var)\s+\w+\s*=\s*/, '')
       .replace(/;\s*$/, '');
-    // eslint-disable-next-line no-new-func
-    const cfg = new Function('return (' + cleaned + ')')();
+    let cfg;
+    try {
+      cfg = JSON.parse(cleaned);
+    } catch {
+      // Firebase コンソールの生のJS (キーが未クォート) をJSONへ変換
+      const jsonish = cleaned
+        .replace(/'/g, '"')
+        .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+        .replace(/,(\s*[}\]])/g, '$1');
+      cfg = JSON.parse(jsonish);
+    }
     if (!cfg || !cfg.apiKey || !cfg.projectId) throw new Error('apiKey / projectId が見つかりません');
     return cfg;
   }

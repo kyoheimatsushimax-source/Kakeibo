@@ -2443,9 +2443,13 @@
   }
 
   function parseFirebaseConfig(text) {
-    const cleaned = text.trim()
-      .replace(/^(export\s+)?(const|let|var)\s+\w+\s*=\s*/, '')
-      .replace(/;\s*$/, '');
+    const src = text.trim();
+    // SDKスニペット全体 (import文や initializeApp 呼び出し込み) が貼られた場合も
+    // firebaseConfig = {...} の部分だけを抜き出す
+    const embedded = src.match(/firebaseConfig\s*=\s*(\{[\s\S]*?\})\s*;/);
+    const cleaned = embedded
+      ? embedded[1]
+      : src.replace(/^(export\s+)?(const|let|var)\s+\w+\s*=\s*/, '').replace(/;\s*$/, '');
     let cfg;
     try {
       cfg = JSON.parse(cleaned);

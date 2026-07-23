@@ -399,6 +399,7 @@
   .payer-badge.family { background: #dbeafe; color: #1e40af; }
   .payer-badge.k { background: #fef3c7; color: #92400e; }
   .payer-badge.c { background: #fce7f3; color: #9f1239; }
+  .payer-badge.tatekae { background: #dcfce7; color: #166534; }
   .payer-select {
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -412,6 +413,7 @@
   .payer-select.family { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
   .payer-select.k { background: #fef3c7; color: #92400e; border-color: #fde68a; }
   .payer-select.c { background: #fce7f3; color: #9f1239; border-color: #fbcfe8; }
+  .payer-select.tatekae { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
   .user-select {
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -992,6 +994,7 @@
           <option value="家族">家族</option>
           <option value="K">K</option>
           <option value="C">C</option>
+          <option value="立替">立替</option>
         </select>
       </div>
       <div>
@@ -1258,6 +1261,7 @@
         <option value="家族">家族</option>
         <option value="K">K</option>
         <option value="C">C</option>
+        <option value="立替">立替</option>
       </select>
       <span style="font-size:13px; color: var(--muted);">|</span>
       <span style="font-size:13px;">利用者を一括で:</span>
@@ -1399,7 +1403,7 @@
     expense: ['クレカ', '家賃', '通信費', '保険', 'サブスク', '保育料', '住居', '衣服', '教育', '小遣い'],
   };
   function allCategories(type) { return CATEGORIES[type].concat(CATEGORIES_LEGACY[type]); }
-  const PAYERS = ['家族', 'K', 'C'];
+  const PAYERS = ['家族', 'K', 'C', '立替'];
   const USERS = ['K', 'C'];
   const CARD_USERS = { '1120': 'K', '1047': 'K', '2011': 'C' };
   const NAME_USERS = { '恭平': 'K', '智姫': 'C' };
@@ -1593,7 +1597,7 @@
       empty.style.display = 'none';
       body.innerHTML = sorted.map(e => {
         const p = payerOf(e);
-        const pcls = p === 'K' ? 'k' : p === 'C' ? 'c' : 'family';
+        const pcls = p === 'K' ? 'k' : p === 'C' ? 'c' : p === '立替' ? 'tatekae' : 'family';
         const pOpts = PAYERS.map(v => `<option value="${v}"${v === p ? ' selected' : ''}>${v}</option>`).join('');
         let userCell;
         if (e.category === 'クレカ') {
@@ -1610,7 +1614,8 @@
         const amtTitle = isRefund ? '返金 (相殺)' : '';
         let categoryCell;
         if (p !== '家族') {
-          categoryCell = '<span style="color:var(--muted);font-size:12px;" title="個人負担のため集計対象外">—</span>';
+          const reason = p === '立替' ? '立替のため集計対象外' : '個人負担のため集計対象外';
+          categoryCell = `<span style="color:var(--muted);font-size:12px;" title="${reason}">—</span>`;
         } else if (e.category === 'クレカ') {
           const sc = CC_SUBCATEGORIES.includes(e.subCategory) ? e.subCategory : classifyMerchant(e.memo);
           const sOpts = CC_SUBCATEGORIES.map(v => `<option value="${v}"${v === sc ? ' selected' : ''}>${v}</option>`).join('');
@@ -1813,7 +1818,7 @@
     empty.style.display = 'none';
     body.innerHTML = sorted.map(e => {
       const p = payerOf(e);
-      const pcls = p === 'K' ? 'k' : p === 'C' ? 'c' : 'family';
+      const pcls = p === 'K' ? 'k' : p === 'C' ? 'c' : p === '立替' ? 'tatekae' : 'family';
       const pOpts = PAYERS.map(v => `<option value="${v}"${v === p ? ' selected' : ''}>${v}</option>`).join('');
       return `
       <tr class="draggable-row" draggable="true" data-income-id="${Number(e.id)}">

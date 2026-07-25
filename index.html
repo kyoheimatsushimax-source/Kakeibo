@@ -1490,6 +1490,8 @@
   function refreshCategories() {
     const sel = document.getElementById('category');
     sel.innerHTML = CATEGORIES[currentType].map(c => `<option value="${c}">${c}</option>`).join('');
+    const last = ui.lastCategory && ui.lastCategory[currentType];
+    if (last && CATEGORIES[currentType].includes(last)) sel.value = last;
   }
 
   function setType(t) {
@@ -2078,6 +2080,9 @@
     };
     entries.push(entry);
     save();
+    if (!ui.lastCategory) ui.lastCategory = {};
+    ui.lastCategory[currentType] = entry.category;
+    saveUI();
     document.getElementById('amount').value = '';
     document.getElementById('memo').value = '';
     document.getElementById('payer').value = '家族';
@@ -2927,7 +2932,7 @@
   });
 
   const UI_KEY = 'kakeibo.ui.v1';
-  let ui = { incomeChartOrder: [], expenseChartOrder: [], incomeEntryOrder: [], incomeIdOrder: [], incomeSortKey: 'date', incomeSortDir: 'desc', entrySortKey: 'date', entrySortDir: 'desc' };
+  let ui = { incomeChartOrder: [], expenseChartOrder: [], incomeEntryOrder: [], incomeIdOrder: [], incomeSortKey: 'date', incomeSortDir: 'desc', entrySortKey: 'date', entrySortDir: 'desc', lastCategory: {} };
   function loadUI() {
     try {
       const raw = JSON.parse(localStorage.getItem(UI_KEY));
@@ -2940,6 +2945,7 @@
         if (raw.incomeSortDir === 'asc' || raw.incomeSortDir === 'desc') ui.incomeSortDir = raw.incomeSortDir;
         if (typeof raw.entrySortKey === 'string') ui.entrySortKey = raw.entrySortKey;
         if (raw.entrySortDir === 'asc' || raw.entrySortDir === 'desc') ui.entrySortDir = raw.entrySortDir;
+        ui.lastCategory = raw.lastCategory && typeof raw.lastCategory === 'object' ? raw.lastCategory : {};
       }
     } catch {}
   }

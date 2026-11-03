@@ -1019,6 +1019,10 @@
       <button type="button" class="primary" id="cc-pick-btn">ファイルを選択</button>
       <input type="file" id="cc-file" accept=".csv,.pdf,text/csv,application/csv,application/pdf,application/vnd.ms-excel,text/plain" style="display:none" />
     </div>
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:12px;">
+      <button type="button" id="dup-check-btn" style="width:auto;">🧹 重複明細をチェック</button>
+      <span id="dup-hint" style="font-size:13px; color:var(--muted);"></span>
+    </div>
   </section>
 
   <section class="card form-card">
@@ -1275,6 +1279,22 @@
     <div class="modal-actions">
       <button type="button" id="cc-cancel">キャンセル</button>
       <button type="button" class="primary" id="cc-confirm">登録する</button>
+    </div>
+  </div>
+</div>
+
+<div id="dup-overlay" class="modal-overlay" style="display:none">
+  <div class="modal wide">
+    <h2>重複明細の整理</h2>
+    <div class="modal-stats" id="dup-stats"></div>
+    <div class="preview-table-wrap" id="dup-wrap"></div>
+    <p style="font-size:12px; color: var(--muted); margin: 0 0 12px;">
+      同じ日付・金額・店舗のクレカ明細を重複と判定しています。各グループで1件 (負担や分類を手で直した明細を優先、なければ最初に取り込んだ明細) を残し、チェックした明細を削除します。<br>
+      同じ店で同額を2回使った等の正当な明細はチェックを外してください (以後は警告しません)。削除直後は「元に戻す」が可能です。
+    </p>
+    <div class="modal-actions">
+      <button type="button" id="dup-cancel">閉じる</button>
+      <button type="button" class="primary" id="dup-confirm">チェックした明細を削除</button>
     </div>
   </div>
 </div>
@@ -1645,6 +1665,7 @@
     renderYearly();
     renderYearProjection();
     renderCategoryTrend();
+    updateDupHint();
     if (activeTab === 'flow') renderFlow();
     if (activeTab === 'stock') renderStock();
   }
@@ -2521,7 +2542,11 @@
           alert('完全バックアップを復元しました');
         } else {
           if (confirm(`${cleanEntries.length}件の明細を読み込みます。既存データに追加しますか? (キャンセルで上書き)`)) {
-            entries = entries.concat(cleanEntries);
+            // 同じIDの明細 (= 同じバックアップを2度読んだ分) は追加しない
+            const ids = new Set(entries.map(x => x.id));
+            const fresh = cleanEntries.filter(x => !ids.has(x.id));
+            entries = entries.concat(fresh);
+            if (fresh.length < cleanEntries.length) alert(`既に存在する${cleanEntries.length - fresh.length}件はスキップしました`);
           } else {
             entries = cleanEntries;
           }
@@ -2613,16 +2638,127 @@
     return { ok: true, items: out };
   }
 
-  function isDuplicate(item, payer) {
-    const itemUser = USERS.includes(item.user) ? item.user : null;
-    return entries.some(e =>
-      e.type === 'expense' &&
-      e.date === item.date &&
-      e.amount === item.amount &&
-      (e.memo || '') === (item.memo || '') &&
-      payerOf(e) === payer &&
-      userOf(e) === itemUser
-    );
+  // ---- 重複判定 ----
+  // キーは「日付 + 金額 + 店舗名(正規化)」のみ。負担・利用者・分類は取込後に手で変える項目なので
+  // キーに含めない (含めると、修正済みの明細を再取込した際に重複がすり抜ける)。
+  // 店舗名は全角/半角・空白・大文字小文字の揺れを吸収 (CSVとPDFの混在対策)。
+  function normMemo(s) {
+    return String(s || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+  }
+  function ccDupKey(e) { return `${e.date}|${e.amount}|${normMemo(e.memo)}`; }
+
+  // 件数ベースで判定: 同日・同額・同店舗の正当な2件 (例: 同じ店で2回購入) を、
+  // 既存に1件しかなければ1件だけ新規として扱う。
+  function computeDupFlags(items) {
+    const counts = new Map();
+    for (const e of entries) {
+      if (e.type !== 'expense') continue;
+      const k = ccDupKey(e);
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return items.map(i => {
+      const k = ccDupKey(i);
+      const c = counts.get(k) || 0;
+      if (c > 0) { counts.set(k, c - 1); return true; }
+      return false;
+    });
+  }
+
+  // 既存データ内の重複グループ (クレカ明細のみ)
+  const DUP_IGNORE_KEY = 'kakeibo_dup_ignore_v1';
+  function loadDupIgnore() {
+    try { return JSON.parse(localStorage.getItem(DUP_IGNORE_KEY)) || {}; } catch { return {}; }
+  }
+  function saveDupIgnore(obj) { try { localStorage.setItem(DUP_IGNORE_KEY, JSON.stringify(obj)); } catch {} }
+  function looksEdited(e) {
+    // 取込後に手で直した形跡がある明細を優先して残す
+    return payerOf(e) !== '家族' ||
+      (CC_SUBCATEGORIES.includes(e.subCategory) && e.subCategory !== classifyMerchant(e.memo));
+  }
+  function findDuplicateGroups() {
+    const ignore = loadDupIgnore();
+    const groups = new Map();
+    for (const e of entries) {
+      if (e.type !== 'expense' || e.category !== 'クレカ') continue;
+      const k = ccDupKey(e);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(e);
+    }
+    const out = [];
+    for (const [key, list] of groups) {
+      if (list.length < 2) continue;
+      // 「重複ではない」と確認済みで、件数が増えていなければ除外
+      if (ignore[key] && list.length <= ignore[key]) continue;
+      const sorted = list.slice().sort((a, b) => {
+        const ea = looksEdited(a) ? 0 : 1, eb = looksEdited(b) ? 0 : 1;
+        return ea !== eb ? ea - eb : a.id - b.id;
+      });
+      out.push({ key, keep: sorted[0], extras: sorted.slice(1) });
+    }
+    return out.sort((a, b) => a.keep.date < b.keep.date ? 1 : -1);
+  }
+
+  let dupGroups = [];
+  function updateDupHint() {
+    const el = document.getElementById('dup-hint');
+    if (!el) return;
+    const n = findDuplicateGroups().reduce((s, g) => s + g.extras.length, 0);
+    el.innerHTML = n > 0
+      ? `⚠ 重複の疑いがある明細: <b>${n}件</b>`
+      : '重複している明細はありません';
+    el.style.color = n > 0 ? 'var(--expense)' : 'var(--muted)';
+  }
+  function openDupModal() {
+    dupGroups = findDuplicateGroups();
+    const wrap = document.getElementById('dup-wrap');
+    const total = dupGroups.reduce((s, g) => s + g.extras.length, 0);
+    document.getElementById('dup-stats').innerHTML = total
+      ? `<span>重複グループ: <b>${dupGroups.length}件</b></span><span>削除候補: <b>${total}件</b></span>`
+      : '<span>重複している明細はありません</span>';
+    document.getElementById('dup-confirm').style.display = total ? '' : 'none';
+    wrap.innerHTML = total ? `
+      <table>
+        <thead><tr><th>削除</th><th>日付</th><th>店舗・摘要</th><th style="text-align:right">金額</th><th>残す明細</th></tr></thead>
+        <tbody>${dupGroups.map((g, gi) => g.extras.map((x, xi) => `
+          <tr>
+            <td><input type="checkbox" checked data-dup-g="${gi}" data-dup-x="${xi}" style="width:auto"></td>
+            <td>${escapeHtml(x.date)}</td>
+            <td>${escapeHtml(x.memo)}</td>
+            <td class="amount">${fmt(x.amount)}</td>
+            <td style="font-size:12px;color:var(--muted)">${escapeHtml(payerOf(g.keep))} / ${escapeHtml(userOf(g.keep) || '-')} / ${escapeHtml(g.keep.subCategory || '-')}</td>
+          </tr>`).join('')).join('')}</tbody>
+      </table>` : '';
+    document.getElementById('dup-overlay').style.display = 'flex';
+  }
+  function hideDupModal() {
+    document.getElementById('dup-overlay').style.display = 'none';
+    dupGroups = [];
+  }
+  function confirmDupDelete() {
+    const removeIds = new Set();
+    const ignore = loadDupIgnore();
+    document.querySelectorAll('#dup-wrap input[data-dup-g]').forEach(cb => {
+      const g = dupGroups[Number(cb.dataset.dupG)];
+      const x = g.extras[Number(cb.dataset.dupX)];
+      if (cb.checked) removeIds.add(x.id);
+    });
+    // チェックを外した = 正当な複数件。以後の警告対象から外す
+    dupGroups.forEach((g, gi) => {
+      const kept = 1 + g.extras.filter(x => !removeIds.has(x.id)).length;
+      if (kept > 1) ignore[g.key] = kept;
+    });
+    saveDupIgnore(ignore);
+    const removed = entries.filter(e => removeIds.has(e.id));
+    hideDupModal();
+    if (!removed.length) { updateDupHint(); return; }
+    entries = entries.filter(e => !removeIds.has(e.id));
+    save();
+    render();
+    showUndo(`重複${removed.length}件を削除しました`, () => {
+      entries = entries.concat(removed);
+      save();
+      render();
+    });
   }
 
   let pendingItems = [];
@@ -2637,8 +2773,7 @@
 
   function refreshCcPreview() {
     const items = pendingItems;
-    const payer = document.getElementById('cc-payer').value;
-    const dupFlags = items.map(i => isDuplicate(i, payer));
+    const dupFlags = computeDupFlags(items);
     const newItems = items.filter((i, idx) => !dupFlags[idx]);
     const newCount = newItems.length;
     const dupCount = dupFlags.filter(f => f).length;
@@ -2683,8 +2818,9 @@
   document.getElementById('cc-confirm').addEventListener('click', () => {
     const payer = document.getElementById('cc-payer').value;
     const added = [];
-    for (const i of pendingItems) {
-      if (isDuplicate(i, payer)) continue;
+    const dupFlags = computeDupFlags(pendingItems);
+    for (const [idx, i] of pendingItems.entries()) {
+      if (dupFlags[idx]) continue;
       added.push({
         id: Date.now() + Math.random(),
         type: 'expense',
@@ -2697,13 +2833,17 @@
         subCategory: CC_SUBCATEGORIES.includes(i.subCategory) ? i.subCategory : classifyMerchant(i.memo),
       });
     }
+    const skipped = pendingItems.length - added.length;
     entries = entries.concat(added);
     save();
     hideCcPreview();
     render();
-    alert(`${added.length}件を「${payer}」負担として登録しました`);
+    alert(`${added.length}件を「${payer}」負担として登録しました` + (skipped ? `\n(重複${skipped}件はスキップ)` : ''));
   });
   document.getElementById('cc-cancel').addEventListener('click', hideCcPreview);
+  document.getElementById('dup-check-btn').addEventListener('click', openDupModal);
+  document.getElementById('dup-cancel').addEventListener('click', hideDupModal);
+  document.getElementById('dup-confirm').addEventListener('click', confirmDupDelete);
   document.getElementById('cc-payer').addEventListener('change', refreshCcPreview);
   document.getElementById('cc-preview-wrap').addEventListener('change', (e) => {
     const idx = e.target.dataset.previewIdx;

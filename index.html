@@ -3208,11 +3208,13 @@
     const sum = (a) => a.reduce((s, e) => s + e.amount, 0);
     const ex = entries.filter(e => e.date.startsWith(monthKey) && e.type === 'expense' && isFamily(e));
     const card = sum(ex.filter(e => e.category === 'クレカ'));
-    const manual = sum(ex.filter(e => e.category !== 'クレカ'));
+    const isAllow = (e) => e.category !== 'クレカ' && /小遣い/.test(e.category);
+    const manual = sum(ex.filter(e => e.category !== 'クレカ' && !isAllow(e)));
+    const allowEntries = sum(ex.filter(isAllow)); // 手入力の小遣い明細も固定費扱い
     const fixedItems = flow.items.filter(x => x.group === '固定費');
-    const fixed = fixedItems.reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0);
+    const fixed = fixedItems.reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0) + allowEntries;
     const items = flow.items.filter(x => x.group === '変動費').reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0);
-    const allowance = fixedItems.filter(x => /小遣い/.test(x.name)).reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0);
+    const allowance = fixedItems.filter(x => /小遣い/.test(x.name)).reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0) + allowEntries;
     const variable = card + manual + items;
     return { card, manual, items, variable, fixed, allowance, total: variable + fixed };
   }

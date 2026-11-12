@@ -912,11 +912,12 @@
         <div class="kpi-delta neutral" id="kpi-balance-delta">—</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label"><span class="kpi-icon">🎯</span>貯蓄率</div>
+        <div class="kpi-label"><span class="kpi-icon">🎯</span>貯蓄率(財形込み)</div>
         <div class="kpi-value" id="kpi-rate">—</div>
         <div class="kpi-delta neutral" id="kpi-rate-delta">—</div>
       </div>
     </div>
+    <div id="kpi-zaikei-note" style="margin-top:12px;font-size:12px;opacity:.85;"></div>
   </section>
 
   <section class="card form-card" id="vsplit-card">
@@ -1163,6 +1164,18 @@
     <div class="chart-container">
       <canvas id="flow-chart"></canvas>
     </div>
+  </section>
+
+  <section class="card form-card" id="zaikei-card">
+    <h2>🏦 財形貯蓄 (給与から天引き)</h2>
+    <p style="font-size:12px; color: var(--muted); margin: -8px 0 12px;">
+      給与(K)は財形天引き<b>後</b>の手取りで記録します。天引き額は収入にも支出にも足さず、<b>貯蓄率(財形込み)</b>の計算と、ストックの財形口座への<b>毎月の自動積立</b>に使います。
+    </p>
+    <div class="flow-add">
+      <input type="text" inputmode="numeric" id="zaikei-amount" placeholder="毎月の天引き額 (円)" />
+      <button type="button" class="primary" id="zaikei-save" style="width:auto;">保存</button>
+    </div>
+    <div class="vsplit-sub" id="zaikei-meta" style="margin-top:8px;"></div>
   </section>
 
   <section class="card form-card">
@@ -1573,7 +1586,8 @@
     const income = monthIncomes.reduce((s, e) => s + e.amount, 0);
     const expense = monthExpenses.reduce((s, e) => s + e.amount, 0) + fixedFlowTotal(monthKey);
     const bal = income - expense;
-    const rate = income > 0 ? (bal / income) * 100 : null;
+    const zk = zaikeiFor(monthKey);
+    const rate = (income + zk) > 0 ? ((bal + zk) / (income + zk)) * 100 : null;
 
     const prev = new Date(viewMonth); prev.setMonth(prev.getMonth() - 1);
     const prevKey = ym(prev);
@@ -1581,13 +1595,17 @@
     const prevIncome = prevEntries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
     const prevExpense = prevEntries.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0) + fixedFlowTotal(prevKey);
     const prevBal = prevIncome - prevExpense;
-    const prevRate = prevIncome > 0 ? (prevBal / prevIncome) * 100 : null;
+    const prevZk = zaikeiFor(prevKey);
+    const prevRate = (prevIncome + prevZk) > 0 ? ((prevBal + prevZk) / (prevIncome + prevZk)) * 100 : null;
 
     document.getElementById('kpi-income').textContent = fmt(income);
     document.getElementById('kpi-expense').textContent = fmt(expense);
     const balEl = document.getElementById('kpi-balance');
     balEl.textContent = (bal >= 0 ? '' : '-') + fmt(Math.abs(bal));
     document.getElementById('kpi-rate').textContent = rate === null ? '—' : rate.toFixed(0) + '%';
+    document.getElementById('kpi-zaikei-note').textContent = zk > 0
+      ? `※給与(K)は財形${fmt(zk)}天引き後の手取り。貯蓄率は財形を貯蓄に含めて計算 (貯蓄額 ${fmt(bal + zk)} = 収支 + 財形)`
+      : '';
 
     setDelta('kpi-income-delta', income, prevIncome, 'higher-better');
     setDelta('kpi-expense-delta', expense, prevExpense, 'lower-better');
@@ -2407,6 +2425,7 @@
       ui.incomeEntryOrder = Array.isArray(data.ui.incomeEntryOrder) ? data.ui.incomeEntryOrder : [];
     }
     ensureAllowanceItems();
+    ensureZaikei();
     save(); saveBudgets(); saveFlow(); saveAssets(); saveClassifyRules(); saveUI();
     migrateUsers();
   }
@@ -3245,6 +3264,33 @@
     saveFlow();
   }
 
+  // 給与(K)は財形天引き後の手取り。天引き額は収入に足さず、貯蓄率(財形込み)とストックの財形口座の自動積立に使う。
+  const ZAIKEI_AMOUNT = 50000;
+  function ensureZaikei() {
+    if (flow.zaikeiSeeded) return;
+    flow.zaikeiSeeded = true;
+    const now = new Date();
+    const nextKey = ym(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+    let acc = assets.accounts.find(a => /財形/.test(a.name) && a.type !== '負債');
+    if (!acc) {
+      acc = { id: 'a-zaikei', type: '預金', name: '財形貯蓄', currency: 'JPY' };
+      assets.accounts.push(acc);
+      if (!assets.snapshots[ym(now)]) assets.snapshots[ym(now)] = {};
+      assets.snapshots[ym(now)][acc.id] = 0; // 実残高はストックタブで入力
+      saveAssets();
+    }
+    if (acc.currency !== 'JPY') { acc.currency = 'JPY'; saveAssets(); }
+    // 当月の残高は手入力済みとみなし、自動積立は翌月から
+    flow.zaikei = { amount: ZAIKEI_AMOUNT, accountId: acc.id, from: nextKey };
+    saveFlow();
+  }
+  function zaikeiFor(monthKey) {
+    const z = flow.zaikei;
+    if (!z || !(z.amount > 0)) return 0;
+    const has = entries.some(e => e.date.startsWith(monthKey) && e.type === 'income' && isFamily(e) && e.category === '給与(K)');
+    return has ? z.amount : 0;
+  }
+
   function setFlowAmount(itemId, monthKey, value) {
     if (!flow.amounts[monthKey]) flow.amounts[monthKey] = {};
     if (Number.isFinite(value) && value > 0) flow.amounts[monthKey][itemId] = Math.round(value);
@@ -3326,15 +3372,25 @@
     return currency + ' ' + rounded.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // 月キーを連番に (年*12+月)
+  function monthIdx(key) { const [y, m] = key.split('-').map(Number); return y * 12 + m; }
+  // 財形口座の自動積立: 基準月(明示残高のある月)より後〜対象月までの、from以降の月数 × 毎月額
+  function zaikeiAutoAdd(accountId, baseKey, monthKey) {
+    const z = flow.zaikei;
+    if (!z || z.accountId !== accountId || !(z.amount > 0)) return 0;
+    const lo = Math.max(baseKey ? monthIdx(baseKey) + 1 : -Infinity, monthIdx(z.from));
+    const hi = monthIdx(monthKey);
+    return hi >= lo ? (hi - lo + 1) * z.amount : 0;
+  }
   function balanceFor(accountId, monthKey) {
     const snap = assets.snapshots[monthKey];
     if (snap && typeof snap[accountId] === 'number') return snap[accountId];
     const months = Object.keys(assets.snapshots).filter(k => k < monthKey).sort();
     for (let i = months.length - 1; i >= 0; i--) {
       const s = assets.snapshots[months[i]];
-      if (s && typeof s[accountId] === 'number') return s[accountId];
+      if (s && typeof s[accountId] === 'number') return s[accountId] + zaikeiAutoAdd(accountId, months[i], monthKey);
     }
-    return 0;
+    return zaikeiAutoAdd(accountId, null, monthKey);
   }
 
   function setBalance(accountId, monthKey, value) {
@@ -3451,7 +3507,7 @@
           const deltaStr = (delta > 0 ? '+' : '') + numComma(delta);
           html += `<div class="account-row" draggable="true" data-acc-id="${a.id}" data-acc-type="${escapeHtml(a.type)}">
             <span class="drag-handle" title="ドラッグで並べ替え">⋮⋮</span>
-            <span class="name">${escapeHtml(a.name)} <span class="currency-badge">${a.currency}</span></span>
+            <span class="name">${escapeHtml(a.name)} <span class="currency-badge">${a.currency}</span>${flow.zaikei && flow.zaikei.accountId === a.id && flow.zaikei.amount > 0 ? ` <span class="currency-badge" title="給与天引き。実残高を入力すればその値で上書きされます">自動積立 +${numComma(flow.zaikei.amount)}/月</span>` : ''}</span>
             <span class="prev-end">${numComma(prevEnd)}</span>
             <input type="text" inputmode="decimal" value="${deltaStr}" data-acc-delta="${a.id}" data-prev-end="${prevEnd}" />
             <span class="this-end">${numComma(thisEnd)}</span>
@@ -3572,8 +3628,18 @@
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
 
+    renderZaikeiCard(monthKey);
     renderFlowList('flow-fixed-list', fixedItems, monthKey);
     renderFlowList('flow-variable-list', variableItems, monthKey);
+  }
+
+  function renderZaikeiCard(monthKey) {
+    const z = flow.zaikei;
+    const inp = document.getElementById('zaikei-amount');
+    if (document.activeElement !== inp) inp.value = z && z.amount ? z.amount : '';
+    const acc = z && assets.accounts.find(a => a.id === z.accountId);
+    document.getElementById('zaikei-meta').textContent = !z ? '' :
+      `この月の天引き: ${fmt(zaikeiFor(monthKey))} (給与(K)の記録がある月のみ) ／ 積立先口座: ${acc ? acc.name : '(未設定)'} ／ 自動積立は ${z.from.replace('-', '年')}月分から`;
   }
 
   function renderFlowList(elId, items, monthKey) {
@@ -3707,6 +3773,13 @@
       }
     });
 
+    document.getElementById('zaikei-save').addEventListener('click', () => {
+      const v = Math.round(parseNumInput(document.getElementById('zaikei-amount').value)) || 0;
+      if (!flow.zaikei) return;
+      flow.zaikei.amount = v > 0 ? v : 0;
+      saveFlow(); render(); renderFlow();
+    });
+
     for (const group of ['fixed', 'variable']) {
       const g = group === 'fixed' ? '固定費' : '変動費';
       document.getElementById(`flow-${group}-add`).addEventListener('click', () => {
@@ -3801,6 +3874,7 @@
   loadAssets();
   loadFlow();
   ensureAllowanceItems();
+  ensureZaikei();
   loadUI();
   incomeSort.key = ui.incomeSortKey || 'date';
   incomeSort.dir = ui.incomeSortDir || 'desc';

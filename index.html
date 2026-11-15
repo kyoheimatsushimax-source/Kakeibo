@@ -990,7 +990,7 @@
 
   <section class="card form-card" id="budget-card">
     <h2>🎯 予算 (変動費) <span class="badge" id="budget-month">—</span></h2>
-    <p class="act-note">カテゴリごとに月の上限を決めて、残りと月末の着地見込みを確認します。着地見込みは当月のみ表示 (今日までの明細を日割りで延長。クレカ明細を取り込んだ日までが対象です)。</p>
+    <p class="act-note">カテゴリごとに月の上限を決めて、残りと月末の着地見込みを確認します。着地見込みは当月のみ表示 (今日までの明細を日割りで延長。クレカ明細を取り込んだ日までが対象です)。分類が「ふるさと納税」「特別支出」の明細は、支出・収支には含めますが、「変動費合計」の予算と見直し候補からは除きます。</p>
     <div class="budget-list" id="budget-list"></div>
     <div class="budget-edit">
       <select id="budget-cat" aria-label="予算カテゴリ"></select>
@@ -1041,6 +1041,8 @@
       <button type="button" class="primary" id="ai-copy">作成してコピー</button>
       <button type="button" id="ai-save">ファイルで保存 (.md)</button>
     </div>
+    <label for="ai-note" style="font-size:12px;margin-top:10px;">Claudeへの補足 (毎回の出力に含めます。例: 4月と10月は幼稚園の施設費を半年分まとめて払う)</label>
+    <textarea id="ai-note" rows="2" maxlength="1000" style="width:100%;font-size:13px;" placeholder="数字だけでは分からない事情を書いておくと、分析が的外れになりにくくなります"></textarea>
     <div class="act-sub" id="ai-status"></div>
     <textarea id="ai-output" readonly rows="8" aria-label="分析用データ" placeholder="ここに分析用データが表示されます" style="width:100%;margin-top:10px;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;display:none;"></textarea>
   </section>
@@ -1537,8 +1539,11 @@
   const BUDGET_KEY = 'kakeibo.budgets.v1';
   const CATEGORIES = {
     income: ['給与(K)', '給与(C)', '賞与(K)', '賞与(C)', '補助金(保育料)', '補助金(児童手当)', '補助金(区手当)'],
-    expense: ['食費', '外食', '日用品', '交通', '娯楽', '旅行', '光熱費', '子ども関連', '医療', '通信', '美容', 'K小遣い', 'C小遣い', 'C立替', 'K立替', 'その他'],
+    expense: ['食費', '外食', '日用品', '交通', '娯楽', '旅行', '光熱費', '子ども関連', '医療', '通信', '美容', 'K小遣い', 'C小遣い', 'C立替', 'K立替', 'ふるさと納税', '特別支出', 'その他'],
   };
+  // 特別支出: 支出・収支には含めるが、予算・平均との比較・着地見込みからは除く (毎月の暮らしの費用ではないため)
+  const SPECIAL_CATS = ['ふるさと納税', '特別支出'];
+  const FURUSATO_WORDS = ['ふるなび', 'さとふる', 'ふるさとチョイス', 'ふるさと納税', '楽天ふるさと', 'ふるさとプレミアム', 'ふるさと本舗'];
   const EXPENSE_GROUPS = {
     'クレカ': ['クレカ'],
     '固定費': ['家賃', '光熱費', '通信費', '保険', 'サブスク', '保育料'],
@@ -1549,8 +1554,9 @@
     return '変動費';
   }
 
-  const CC_SUBCATEGORIES = ['食費', '外食', '日用品', '交通', '娯楽', '旅行', '光熱費', '子ども関連', '医療', '通信', '美容', 'K小遣い', 'C小遣い', 'C立替', 'K立替', 'その他'];
+  const CC_SUBCATEGORIES = ['食費', '外食', '日用品', '交通', '娯楽', '旅行', '光熱費', '子ども関連', '医療', '通信', '美容', 'K小遣い', 'C小遣い', 'C立替', 'K立替', 'ふるさと納税', '特別支出', 'その他'];
   const SUBCAT_PATTERNS = [
+    { sub: 'ふるさと納税', words: FURUSATO_WORDS },
     { sub: '子ども関連', words: ['西松屋', 'アカチャンホンポ', 'あかちゃんほんぽ', 'トイザらス', 'トイザラス', 'ベビーザらス', 'ベビー', 'バースデイ', 'こどもの森', '保育', '幼稚園', 'こども園', '学童', 'ランドセル', 'ボーネルンド', 'キッズ', 'KIDS', 'スイミング', '習い事', 'ベネッセ', 'こどもちゃれんじ', '公文', 'くもん', 'KUMON', '学研'] },
     { sub: '旅行', words: ['JTB', 'ＪＴＢ', 'HIS', 'エイチアイエス', '楽天トラベル', 'じゃらん', '一休', 'エクスペディア', 'Expedia', 'EXPEDIA', 'Booking', 'BOOKING', 'agoda', 'アゴダ', 'Airbnb', 'ANA', 'ＡＮＡ', '全日空', 'JAL', 'ＪＡＬ', '日本航空', 'スカイマーク', 'ジェットスター', 'ピーチ', 'Peach', '航空', 'エアライン', 'ホテル', 'HOTEL', '旅館', '温泉', '宿泊', 'リゾート', 'RESORT', '新幹線', 'みどりの窓口', 'EXPRESS予約', 'えきねっと'] },
     { sub: '光熱費', words: ['東京電力', 'TEPCO', '関西電力', '中部電力', '九州電力', '東北電力', '北海道電力', '中国電力', '四国電力', '北陸電力', '沖縄電力', '電力', 'でんき', '東京ガス', '大阪ガス', '東邦ガス', '西部ガス', '都市ガス', 'プロパン', 'LPガス', '水道局', '水道', '上下水道', 'Looop', 'ループ電気', 'CDエナジー', '楽天でんき', 'auでんき'] },
@@ -2085,7 +2091,7 @@
     return map;
   }
   function catTotal(map, cat) {
-    if (cat === BUDGET_TOTAL) return Object.values(map).reduce((s, x) => ({ ent: s.ent + x.ent, item: s.item + x.item }), { ent: 0, item: 0 });
+    if (cat === BUDGET_TOTAL) return Object.keys(map).filter(c => !SPECIAL_CATS.includes(c)).reduce((s, c) => ({ ent: s.ent + map[c].ent, item: s.item + map[c].item }), { ent: 0, item: 0 });
     return map[cat] || { ent: 0, item: 0 };
   }
   // 直近 n か月 (対象月は含めない) のうち、家族の支出明細がある月
@@ -2110,7 +2116,7 @@
   }
   function budgetCategories() {
     const set = new Set([BUDGET_TOTAL]);
-    CC_SUBCATEGORIES.filter(c => !/小遣い/.test(c)).forEach(c => set.add(c));
+    CC_SUBCATEGORIES.filter(c => !/小遣い/.test(c) && !SPECIAL_CATS.includes(c)).forEach(c => set.add(c));
     flow.items.filter(x => x.group === '変動費').forEach(x => set.add(x.name));
     Object.keys(budgets).forEach(c => set.add(c));
     return Array.from(set);
@@ -2187,6 +2193,7 @@
     const cats = new Set(Object.keys(map).concat(Object.keys(avg)));
     const rows = [];
     for (const cat of cats) {
+      if (SPECIAL_CATS.includes(cat)) continue;
       const t = catTotal(map, cat);
       const actual = t.ent + t.item;
       const a = avg[cat] || 0;
@@ -2285,6 +2292,8 @@
       `<tr class="total"><td>計 ${rows.length}件</td><td class="num">${fmt(sum)}</td><td class="num">${fmt(sum * 12)}</td></tr></tbody></table>`;
   }
   function renderActions(monthKey) {
+    const noteEl = document.getElementById('ai-note');
+    if (noteEl && document.activeElement !== noteEl) noteEl.value = typeof flow.aiNote === 'string' ? flow.aiNote : '';
     renderBudgets(monthKey);
     renderReview(monthKey);
     renderMerchants(monthKey);
@@ -2313,6 +2322,7 @@
       if (n === 0) { alert('過去の月の明細がないため、平均を計算できません'); return; }
       let added = 0, total = 0;
       for (const cat in avg) {
+        if (SPECIAL_CATS.includes(cat)) continue;
         total += avg[cat];
         if (budgets[cat]) continue;
         const v = Math.ceil(avg[cat] / 1000) * 1000;
@@ -2370,6 +2380,9 @@
     out.push('- 固定費 = フロータブの固定費項目 + 手入力の小遣い。変動費 = それ以外すべて (クレカ + 手入力 + 変動費項目)。支出 = 固定費 + 変動費');
     out.push('- 給与(K)は財形貯蓄の天引き後の手取り。貯蓄率 = (収支 + 財形) ÷ (収入 + 財形)');
     out.push('- クレカは利用日の月に支出として計上 (引落月ではない)');
+    out.push('- 「ふるさと納税」「特別支出」は特別支出として扱う。支出・変動費・収支には含まれるが、毎月の暮らしの費用ではないので、傾向の比較や削減余地の検討では除いて考えること。ふるさと納税は、自己負担2,000円を除き控除上限内なら所得税・住民税から控除される税の前払い');
+    out.push('- 固定費は支払った月に全額を計上 (半年払い・年払いも月割りしていない)。月別の増減は「固定費の項目別・月別」の表で確認すること');
+    if (typeof flow.aiNote === 'string' && flow.aiNote.trim()) out.push('- 利用者からの補足: ' + flow.aiNote.trim().replace(/\s*\n\s*/g, ' ／ '));
     if (partial) out.push(`- *印の ${partial.replace('-', '/')} は月の途中 (${new Date().getDate()}日時点)。他の月と単純比較しないでください`);
     if (keys.length === 0) { out.push(''); out.push('この期間に明細がありません。'); return out.join('\n'); }
 
@@ -2377,20 +2390,20 @@
     out.push('');
     out.push('## 月別の収支');
     const mrows = [];
-    let tInc = 0, tExp = 0, tFix = 0, tVar = 0, tZk = 0;
+    let tInc = 0, tExp = 0, tFix = 0, tVar = 0, tZk = 0, tSp = 0;
     for (const k of keys) {
       const inc = entries.filter(e => e.date.startsWith(k) && e.type === 'income' && isFamily(e)).reduce((a, e) => a + e.amount, 0);
       const b = spendBreakdown(k);
       const zk = zaikeiFor(k);
       const net = inc - b.total;
       const rate = (inc + zk) > 0 ? ((net + zk) / (inc + zk) * 100).toFixed(1) : '—';
-      tInc += inc; tExp += b.total; tFix += b.fixed; tVar += b.variable; tZk += zk;
-      mrows.push([lab(k), n(inc), n(b.total), n(b.fixed), n(b.variable), n(net), n(zk), rate]);
+      tInc += inc; tExp += b.total; tFix += b.fixed; tVar += b.variable; tZk += zk; tSp += b.special;
+      mrows.push([lab(k), n(inc), n(b.total), n(b.fixed), n(b.variable), n(b.special), n(net), n(net + b.special), n(zk), rate]);
     }
     const tRate = (tInc + tZk) > 0 ? ((tInc - tExp + tZk) / (tInc + tZk) * 100).toFixed(1) : '—';
-    mrows.push(['合計', n(tInc), n(tExp), n(tFix), n(tVar), n(tInc - tExp), n(tZk), tRate]);
-    mrows.push(['月平均', n(tInc / keys.length), n(tExp / keys.length), n(tFix / keys.length), n(tVar / keys.length), n((tInc - tExp) / keys.length), n(tZk / keys.length), '']);
-    out.push(table(['月', '収入', '支出', 'うち固定費', 'うち変動費', '収支', '財形', '貯蓄率%'], mrows));
+    mrows.push(['合計', n(tInc), n(tExp), n(tFix), n(tVar), n(tSp), n(tInc - tExp), n(tInc - tExp + tSp), n(tZk), tRate]);
+    mrows.push(['月平均', n(tInc / keys.length), n(tExp / keys.length), n(tFix / keys.length), n(tVar / keys.length), n(tSp / keys.length), n((tInc - tExp) / keys.length), n((tInc - tExp + tSp) / keys.length), n(tZk / keys.length), '']);
+    out.push(table(['月', '収入', '支出', 'うち固定費', 'うち変動費', '変動費のうち特別支出', '収支', '特別支出を除く収支', '財形', '貯蓄率%'], mrows));
 
     // 収入の内訳
     out.push('');
@@ -2413,6 +2426,13 @@
     out.push(`## 固定費の項目 (${endKey.replace('-', '/')}時点の月額)`);
     const fx = flow.items.filter(x => x.group === '固定費').map(x => ({ x, amt: flowAmountFor(x.id, endKey) })).filter(o => o.amt > 0).sort((a, b) => b.amt - a.amt);
     out.push(table(['項目', '月額', '年額', '最終見直し'], fx.map(o => [o.x.name, n(o.amt), n(o.amt * 12), o.x.reviewed ? o.x.reviewed.replace('-', '/') : '未見直し'])));
+    out.push('');
+    out.push('## 固定費の項目別・月別 (支払った月に計上)');
+    const fxAll = flow.items.filter(x => x.group === '固定費').filter(x => keys.some(k => flowAmountFor(x.id, k) > 0));
+    const fxRows = fxAll.map(x => [x.name].concat(keys.map(k => n(flowAmountFor(x.id, k)))));
+    const allowM = keys.map(k => familyExpenses(k).filter(e => e.category !== 'クレカ' && /小遣い/.test(e.category)).reduce((a, e) => a + e.amount, 0));
+    if (allowM.some(v => v !== 0)) fxRows.push(['手入力の小遣い'].concat(allowM.map(n)));
+    out.push(table(['項目'].concat(keys.map(lab)), fxRows));
 
     // 予算
     out.push('');
@@ -2442,9 +2462,16 @@
       const ms = Array.from(g.values()).map(o => ({ name: o.name, cat: o.cat, count: o.list.length, amount: o.list.reduce((a, e) => a + e.amount, 0) })).filter(r => r.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 20);
       out.push(table(['店舗', 'カテゴリ', '回数', '金額', '1回あたり'], ms.map(r => [r.name, r.cat, String(r.count), n(r.amount), n(r.amount / r.count)])));
       out.push('');
-      out.push('## 単発の大きい明細 上位15');
+      out.push('## 単発の大きい明細 上位15 (同額の返金で取り消された請求は除く)');
       const big = [];
-      for (const k of keys) for (const e of familyExpenses(k)) if (e.amount > 0 && !(e.category !== 'クレカ' && /小遣い/.test(e.category))) big.push(e);
+      const refunds = {};
+      for (const k of keys) for (const e of familyExpenses(k)) if (e.amount < 0) { const rk = normMemo(e.memo) + '|' + (-e.amount); refunds[rk] = (refunds[rk] || 0) + 1; }
+      for (const k of keys) for (const e of familyExpenses(k)) {
+        if (!(e.amount > 0) || (e.category !== 'クレカ' && /小遣い/.test(e.category))) continue;
+        const rk = normMemo(e.memo) + '|' + e.amount;
+        if (refunds[rk] > 0) { refunds[rk]--; continue; } // 同額の返金で取り消された請求
+        big.push(e);
+      }
       big.sort((a, b) => b.amount - a.amount);
       out.push(table(['日付', '店舗・メモ', 'カテゴリ', '金額'], big.slice(0, 15).map(e => [e.date, (e.memo || '').trim() || '(メモなし)', entryCat(e), n(e.amount)])));
     }
@@ -2483,7 +2510,7 @@
       for (const k of sKeys) {
         const r = reconcile(k);
         if (r.used === 0) continue;
-        rrows.push([k.replace('-', '/'), n(r.saving), n(r.gain), n(r.fx), n(r.dNw), n(r.gap), [r.unfilled ? `未入力${r.unfilled}口座` : '', r.hasInvest && !r.contribSet ? '投資の入金額未入力' : '', !r.hasFlow ? '明細なし' : ''].filter(Boolean).join(' ')]);
+        rrows.push([k.replace('-', '/'), n(r.saving), n(r.gain), n(r.fx), n(r.dNw), n(r.gap), [r.unfilled ? `未入力${r.unfilled}口座` : '', r.newAcc ? `新規${r.newAcc}口座は対象外` : '', r.hasInvest && !r.contribSet ? '投資の入金額未入力' : '', !r.hasFlow ? '明細なし' : ''].filter(Boolean).join(' ')]);
       }
       out.push(table(['月', '収支+財形', '投資の評価損益', '為替の影響', '純資産の増減', '使途不明金', '注意'], rrows));
       out.push('');
@@ -2502,6 +2529,9 @@
   function setupAnalysis() {
     const status = document.getElementById('ai-status');
     const outEl = document.getElementById('ai-output');
+    const noteEl = document.getElementById('ai-note');
+    noteEl.value = typeof flow.aiNote === 'string' ? flow.aiNote : '';
+    noteEl.addEventListener('change', () => { flow.aiNote = noteEl.value.slice(0, 1000); saveFlow(); });
     const build = () => {
       const months = Number(document.getElementById('ai-period').value) || 6;
       const text = buildAnalysisReport(ym(viewMonth), months, document.getElementById('ai-names').checked);
@@ -2583,7 +2613,7 @@
     set('vs-manual', fmt(b.manual));
     set('vs-items', fmt(b.items));
     set('vs-share', b.total > 0 ? `支出全体の ${pct(b.variable).toFixed(1)}%` : '支出全体の —');
-    set('vs-allow', `固定費のうち小遣い(K+C): ${fmt(b.allowance)}`);
+    set('vs-allow', `固定費のうち小遣い(K+C): ${fmt(b.allowance)}` + (b.special ? ` ／ 変動費のうち特別支出(ふるさと納税など): ${fmt(b.special)} → 除くと ${fmt(b.variable - b.special)}` : ''));
     document.getElementById('vs-bar-var').style.width = pct(b.variable) + '%';
     document.getElementById('vs-bar-fix').style.width = pct(b.fixed) + '%';
     const el = document.getElementById('vs-delta');
@@ -3031,6 +3061,7 @@
     }
     ensureAllowanceItems();
     ensureZaikei();
+    ensureFurusato();
     save(); saveBudgets(); saveFlow(); saveAssets(); saveClassifyRules(); saveUI();
     migrateUsers();
   }
@@ -3840,7 +3871,8 @@
     const items = flow.items.filter(x => x.group === '変動費').reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0);
     const allowance = fixedItems.filter(x => /小遣い/.test(x.name)).reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0) + allowEntries;
     const variable = card + manual + items;
-    return { card, manual, items, variable, fixed, allowance, total: variable + fixed };
+    const special = sum(ex.filter(e => SPECIAL_CATS.includes(entryCat(e))));
+    return { card, manual, items, variable, fixed, allowance, special, total: variable + fixed };
   }
 
   // K・Cの小遣い(月10万円)を固定費として自動計上。固定費は翌月以降へ自動で引き継がれる。
@@ -3887,6 +3919,21 @@
     if (acc.currency !== 'JPY') { acc.currency = 'JPY'; saveAssets(); }
     // 当月の残高は手入力済みとみなし、自動積立は翌月から
     flow.zaikei = { amount: ZAIKEI_AMOUNT, accountId: acc.id, from: nextKey };
+    saveFlow();
+  }
+  // 既存の明細のうち、店舗名がふるさと納税サイトで分類が「その他」のものを「ふるさと納税」へ (初回のみ)
+  function ensureFurusato() {
+    if (flow.furusatoMigrated) return;
+    flow.furusatoMigrated = true;
+    let changed = false;
+    for (const e of entries) {
+      if (e.type !== 'expense' || !e.memo) continue;
+      const m = String(e.memo).normalize('NFKC');
+      if (!FURUSATO_WORDS.some(w => m.includes(w))) continue;
+      if (e.category === 'クレカ' && (e.subCategory === 'その他' || !e.subCategory)) { e.subCategory = 'ふるさと納税'; changed = true; }
+      else if (e.category === 'その他') { e.category = 'ふるさと納税'; changed = true; }
+    }
+    if (changed) save();
     saveFlow();
   }
   function zaikeiFor(monthKey) {
@@ -4030,8 +4077,12 @@
     const prevKey = prevMonthKey(monthKey);
     const r = { nwPrev: 0, nwCur: 0, cash: 0, investIn: 0, gain: 0, debt: 0, fx: 0, used: 0, newAcc: 0, noRate: 0, unfilled: 0, hasInvest: false, contribSet: false };
     for (const a of assets.accounts) {
-      if (!hasHistoryBefore(a.id, monthKey)) { r.newAcc++; continue; }
-      const rP = getRate(a.currency, prevKey), rC = getRate(a.currency, monthKey);
+      // 今月追加した口座は前月末残高がないので原則対象外。
+      // ただし投資口座で「今月の入金額」が入っていれば、前月末0円からの買付として対象にする (預金→新しい投資口座への資金移動)
+      const isNew = !hasHistoryBefore(a.id, monthKey);
+      if (isNew && !(a.type === '投資' && contribFor(a.id, monthKey) !== 0 && hasBalance(a.id, monthKey))) { r.newAcc++; continue; }
+      const rC = getRate(a.currency, monthKey);
+      const rP = isNew ? rC : getRate(a.currency, prevKey);
       if (rP === null || rC === null) { r.noRate++; continue; }
       r.used++;
       if (!hasBalance(a.id, monthKey)) r.unfilled++;
@@ -4073,7 +4124,7 @@
     }
     const notes = [];
     if (r.unfilled) notes.push(`今月末の残高が未入力の口座が ${r.unfilled} 件あります (前月末のままとして計算)。`);
-    if (r.newAcc) notes.push(`今月追加した口座 ${r.newAcc} 件は、前月末の残高がないため対象外です。`);
+    if (r.newAcc) notes.push(`今月追加した口座 ${r.newAcc} 件は、前月末の残高がないため対象外です。預金などから買い付けた新しい投資口座は、口座一覧の「今月の入金額」に買付額を入れると対象になります (入れないと、減った預金の分が使途不明金に出ます)。`);
     if (r.noRate) notes.push(`為替レート未設定の口座 ${r.noRate} 件は対象外です。`);
     if (!r.hasFlow) notes.push('この月の収入・支出の明細がありません。');
     if (r.hasInvest && !r.contribSet) notes.push('投資口座の入金額が未入力のため、投資口座の増減はすべて評価損益として扱っています。積立や買付をした月は、口座一覧で入金額を入力してください。');
@@ -4707,6 +4758,7 @@
   loadFlow();
   ensureAllowanceItems();
   ensureZaikei();
+  ensureFurusato();
   loadUI();
   incomeSort.key = ui.incomeSortKey || 'date';
   incomeSort.dir = ui.incomeSortDir || 'desc';

@@ -1,6 +1,6 @@
 // かんたん家計簿 Service Worker
 // 方針: 同一オリジンのGETは「ネット優先 → 失敗時のみキャッシュ」。常に最新のindex.htmlを取得し、オフライン時だけ保存済みを使う。
-const CACHE = 'kakeibo-v2';
+const CACHE = 'kakeibo-v3';
 const PRECACHE = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {

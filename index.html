@@ -541,7 +541,7 @@
   .accounts-group-head .total { color: var(--muted); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; }
   .account-row {
     display: grid;
-    grid-template-columns: 16px 1fr 110px 120px 110px 90px 30px;
+    grid-template-columns: 16px 1fr 110px 130px 120px 90px 30px;
     gap: 8px;
     align-items: center;
     padding: 8px 10px;
@@ -556,6 +556,15 @@
   }
   .account-row .prev-end { color: var(--muted); }
   .account-row .this-end { font-weight: 700; }
+  .account-row .delta { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; line-height: 1.25; }
+  .account-row .delta small { display: block; font-size: 10px; font-weight: 500; opacity: 0.85; }
+  .delta.good, .stock-diff.good, .accounts-group-head .diff.good { color: var(--income); }
+  .delta.bad, .stock-diff.bad, .accounts-group-head .diff.bad { color: var(--expense); }
+  .delta.flat, .delta.pending { color: var(--muted); font-weight: 500; }
+  .account-row input.unset { border-style: dashed; background: #fffbeb; }
+  .stock-diff { font-size: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .stock-summary-item.net .stock-diff { color: rgba(255,255,255,0.9); }
+  .accounts-group-head .diff { font-size: 12px; font-weight: 600; margin-left: 8px; color: var(--muted); }
   .account-row input[type="text"], .account-row input[type="number"] {
     font-variant-numeric: tabular-nums;
     text-align: right;
@@ -583,7 +592,7 @@
   @media (max-width: 720px) {
     .account-add { grid-template-columns: 1fr 1fr; }
     .account-row {
-      grid-template-columns: 16px 1fr 100px 100px 30px;
+      grid-template-columns: 16px 1fr 108px 92px 30px;
     }
     .account-row .prev-end, .account-row .meta-col { display: none; }
     .account-row.account-head .col-h.meta-col { display: none; }
@@ -1207,24 +1216,28 @@
   <section class="card form-card">
     <h2>🏦 ストック サマリ <span class="badge" id="stock-month">—</span></h2>
     <p style="font-size:12px; color: var(--muted); margin: -8px 0 14px;">
-      上部の月切替で表示月を変更できます。月末時点のスナップショットを保存します。
+      上部の月切替で表示月を変更できます。各口座の<b>月末残高</b>を入力すると、前月からの増減を自動計算します。
     </p>
     <div class="stock-summary">
       <div class="stock-summary-item deposit">
         <div class="stock-label">💵 預金</div>
         <div class="stock-value" id="stock-deposit">¥0</div>
+        <div class="stock-diff" id="stock-deposit-diff"></div>
       </div>
       <div class="stock-summary-item invest">
         <div class="stock-label">📈 投資</div>
         <div class="stock-value" id="stock-invest">¥0</div>
+        <div class="stock-diff" id="stock-invest-diff"></div>
       </div>
       <div class="stock-summary-item debt">
         <div class="stock-label">🔴 負債</div>
         <div class="stock-value" id="stock-debt">¥0</div>
+        <div class="stock-diff" id="stock-debt-diff"></div>
       </div>
       <div class="stock-summary-item net">
         <div class="stock-label">⭐ 純資産</div>
         <div class="stock-value" id="stock-net">¥0</div>
+        <div class="stock-diff" id="stock-net-diff"></div>
       </div>
     </div>
   </section>
@@ -1264,7 +1277,7 @@
   </section>
 
   <section class="card form-card">
-    <h2>💼 口座一覧
+    <h2>💼 口座一覧 <span class="badge" id="acc-progress">—</span>
       <button type="button" id="transfer-btn" style="width:auto;padding:4px 12px;font-size:12px;margin-left:8px;">⇄ 振替を記録</button>
     </h2>
     <div id="accounts-list"></div>
@@ -1296,7 +1309,8 @@
       <button type="button" class="primary" id="acc-add-btn" style="width:auto;">追加</button>
     </div>
     <p style="font-size:12px; color: var(--muted); margin-top: 12px;">
-      負債は正の数で入力してください (純資産計算時にマイナス扱いになります)。外貨は表示月の為替レートで自動的に円換算します。
+      <b>今月末残高</b>の欄に、通帳やアプリに表示されている残高をそのまま入力してください (増減は自動計算)。点線の欄は未入力で、前月末の残高を引き継いで表示しています。入力を消すと未入力に戻ります。Enter / Tab で次の口座へ進みます。<br>
+      負債は正の数で入力してください (純資産計算時にマイナス扱いになります)。外貨は口座の通貨で入力し、表示月の為替レートで自動的に円換算します。
     </p>
   </section>
 </main>
@@ -3399,6 +3413,27 @@
     saveAssets();
   }
 
+  function hasBalance(accountId, monthKey) {
+    const snap = assets.snapshots[monthKey];
+    return !!snap && typeof snap[accountId] === 'number';
+  }
+  function clearBalance(accountId, monthKey) {
+    const snap = assets.snapshots[monthKey];
+    if (!snap) return;
+    delete snap[accountId];
+    if (Object.keys(snap).length === 0) delete assets.snapshots[monthKey];
+    saveAssets();
+  }
+  // 増減の表示。invert=true (負債) は増加を赤・減少を緑にする
+  function diffParts(delta, base, invert) {
+    const eps = 0.005;
+    if (Math.abs(delta) < eps) return { cls: 'flat', sign: '±', pct: '' };
+    const up = delta > 0;
+    const cls = (up !== !!invert) ? 'good' : 'bad';
+    const pct = Math.abs(base) > eps ? ` (${up ? '+' : '-'}${Math.abs(delta / base * 100).toFixed(1)}%)` : '';
+    return { cls, sign: up ? '+' : '-', pct };
+  }
+
   function prevMonthKey(monthKey) {
     const [y, m] = monthKey.split('-').map(Number);
     const d = new Date(y, m - 2, 1);
@@ -3460,14 +3495,39 @@
     document.getElementById('fx-sgd-prev').textContent =
       !explicitSgd && sgdRate ? `（直近月のレート ${sgdRate} を使用中）` : '';
 
+    const prevKey = prevMonthKey(monthKey);
     const totals = { '預金': 0, '投資': 0, '負債': 0 };
+    const prevTotals = { '預金': 0, '投資': 0, '負債': 0 };
     let missingRate = false;
+    let filled = 0;
     for (const a of assets.accounts) {
+      if (hasBalance(a.id, monthKey)) filled++;
       const raw = balanceFor(a.id, monthKey);
       const jpy = toJPY(raw, a.currency, monthKey);
       if (jpy === null) { missingRate = true; continue; }
       totals[a.type] += jpy;
+      // 前月末は前月のレートで円換算 (為替変動も増減に含まれる)
+      const pj = toJPY(balanceFor(a.id, prevKey), a.currency, prevKey);
+      prevTotals[a.type] += pj === null ? 0 : pj;
     }
+    const diffText = (cur, prev, invert) => {
+      const d = cur - prev;
+      const p = diffParts(d, prev, invert);
+      return { cls: p.cls, text: p.cls === 'flat' ? '前月比 ±0' : `前月比 ${p.sign}${fmt(Math.abs(d))}${p.pct}` };
+    };
+    const setDiff = (id, cur, prev, invert, colored) => {
+      const el = document.getElementById(id);
+      const t = diffText(cur, prev, invert);
+      el.textContent = t.text;
+      el.className = 'stock-diff' + (colored ? ' ' + t.cls : '');
+    };
+    setDiff('stock-deposit-diff', totals['預金'], prevTotals['預金'], false, true);
+    setDiff('stock-invest-diff', totals['投資'], prevTotals['投資'], false, true);
+    setDiff('stock-debt-diff', totals['負債'], prevTotals['負債'], true, true);
+    setDiff('stock-net-diff', totals['預金'] + totals['投資'] - totals['負債'], prevTotals['預金'] + prevTotals['投資'] - prevTotals['負債'], false, false);
+    const prog = document.getElementById('acc-progress');
+    const nAcc = assets.accounts.length;
+    prog.textContent = nAcc === 0 ? '口座なし' : (filled === nAcc ? `${monthLabel(viewMonth)} 入力済み ${filled}/${nAcc} ✓` : `${monthLabel(viewMonth)} 入力済み ${filled}/${nAcc} (未入力 ${nAcc - filled})`);
     document.getElementById('stock-deposit').textContent = fmt(totals['預金']);
     document.getElementById('stock-invest').textContent = fmt(totals['投資']);
     document.getElementById('stock-debt').textContent = fmt(totals['負債']);
@@ -3482,19 +3542,19 @@
     if (missingRate) {
       html += `<div style="color:var(--expense);font-size:12px;padding:8px 0;">⚠ 外貨レートが未設定の通貨があります。上の為替レート欄に入力してください。</div>`;
     }
-    const prevKey = prevMonthKey(monthKey);
     for (const type of ['預金', '投資', '負債']) {
       const list = groups[type];
+      const gd = diffText(totals[type], prevTotals[type], type === '負債');
       html += `<div class="accounts-group">
-        <div class="accounts-group-head"><span>${type}</span><span class="total">${fmt(totals[type])}</span></div>`;
+        <div class="accounts-group-head"><span>${type}</span><span class="total">${fmt(totals[type])}<span class="diff ${gd.cls}">${gd.text}</span></span></div>`;
       if (list.length === 0) {
         html += `<div style="font-size:12px;color:var(--muted);padding:8px 0;">この区分の口座はまだありません</div>`;
       } else {
         html += `<div class="account-row account-head">
           <span></span><span class="name">口座</span>
           <span class="col-h prev-end">前月末残高</span>
-          <span class="col-h">今月の増減</span>
-          <span class="col-h">今月末残高</span>
+          <span class="col-h">今月末残高 (入力)</span>
+          <span class="col-h">前月からの増減</span>
           <span class="meta-col col-h">円換算</span>
           <span></span>
         </div>`;
@@ -3504,13 +3564,18 @@
           const delta = thisEnd - prevEnd;
           const jpy = toJPY(thisEnd, a.currency, monthKey);
           const jpyLabel = a.currency === 'JPY' ? '' : (jpy === null ? '(レート未設定)' : '= ' + fmt(jpy));
-          const deltaStr = (delta > 0 ? '+' : '') + numComma(delta);
+          const explicit = hasBalance(a.id, monthKey);
+          const dp = diffParts(delta, prevEnd, a.type === '負債');
+          let deltaHtml;
+          if (!explicit && dp.cls === 'flat') deltaHtml = `<span class="delta pending">未入力</span>`;
+          else if (dp.cls === 'flat') deltaHtml = `<span class="delta flat">±0</span>`;
+          else deltaHtml = `<span class="delta ${dp.cls}">${dp.sign}${numComma(Math.abs(delta))}<small>${explicit ? dp.pct.trim() : '自動計上・未入力'}</small></span>`;
           html += `<div class="account-row" draggable="true" data-acc-id="${a.id}" data-acc-type="${escapeHtml(a.type)}">
             <span class="drag-handle" title="ドラッグで並べ替え">⋮⋮</span>
             <span class="name">${escapeHtml(a.name)} <span class="currency-badge">${a.currency}</span>${flow.zaikei && flow.zaikei.accountId === a.id && flow.zaikei.amount > 0 ? ` <span class="currency-badge" title="給与天引き。実残高を入力すればその値で上書きされます">自動積立 +${numComma(flow.zaikei.amount)}/月</span>` : ''}</span>
             <span class="prev-end">${numComma(prevEnd)}</span>
-            <input type="text" inputmode="decimal" value="${deltaStr}" data-acc-delta="${a.id}" data-prev-end="${prevEnd}" />
-            <span class="this-end">${numComma(thisEnd)}</span>
+            <input type="text" inputmode="decimal" class="${explicit ? '' : 'unset'}" value="${explicit ? numComma(thisEnd) : ''}" placeholder="${numComma(thisEnd)}" data-acc-balance="${a.id}" aria-label="${escapeHtml(a.name)} 今月末残高" title="${explicit ? '今月末の残高' : '未入力 (前月末の残高を引継ぎ表示中)'}" />
+            ${deltaHtml}
             <span class="meta-col jpy-eq">${jpyLabel}</span>
             <button type="button" class="delete-btn" data-acc-delete="${a.id}" title="削除">×</button>
           </div>`;
@@ -3674,14 +3739,29 @@
       renderStock();
     });
 
+    // 今月末残高を直接入力 (増減は自動計算)。空欄にすると未入力(前月末を引継ぎ)に戻す
     document.getElementById('accounts-list').addEventListener('change', (e) => {
-      const id = e.target.dataset.accDelta;
+      const id = e.target.dataset.accBalance;
       if (!id) return;
-      const delta = parseNumInput(e.target.value);
-      if (!Number.isFinite(delta)) { renderStock(); return; }
-      const prevEnd = parseFloat(e.target.dataset.prevEnd || '0') || 0;
-      setBalance(id, ym(viewMonth), prevEnd + delta);
+      const mk = ym(viewMonth);
+      const rawStr = String(e.target.value || '').trim();
+      if (rawStr === '') { clearBalance(id, mk); renderStock(); return; }
+      const bal = parseNumInput(rawStr);
+      if (!Number.isFinite(bal)) { renderStock(); return; }
+      setBalance(id, mk, bal);
       renderStock();
+    });
+    // Enter / Tab で次の口座の残高欄へ (再描画でフォーカスが外れないようにする)
+    document.getElementById('accounts-list').addEventListener('keydown', (e) => {
+      const cur = e.target.dataset && e.target.dataset.accBalance;
+      if (!cur || (e.key !== 'Enter' && e.key !== 'Tab') || e.isComposing) return;
+      const ids = Array.from(document.querySelectorAll('#accounts-list [data-acc-balance]')).map(x => x.dataset.accBalance);
+      const nextId = ids[ids.indexOf(cur) + (e.shiftKey ? -1 : 1)];
+      if (!nextId) { if (e.key === 'Enter') e.target.blur(); return; }
+      e.preventDefault();
+      e.target.blur(); // 変更があれば change → 保存・再描画
+      const next = document.querySelector(`#accounts-list [data-acc-balance="${nextId}"]`);
+      if (next) { next.focus(); next.select(); }
     });
 
     const onFxChange = (cur) => (e) => {

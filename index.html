@@ -66,11 +66,13 @@
     margin: 0 auto;
     padding: 24px 16px;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
   }
+  main > *, .grid-2 > *, .card { min-width: 0; }
+  #income-wrap, #entries-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   @media (min-width: 900px) {
-    main { grid-template-columns: 1fr 1fr; }
+    main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .summary, .form-card { grid-column: 1 / -1; }
   }
   .card {
@@ -309,7 +311,7 @@
 
   .grid-2 {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
   }
   @media (min-width: 900px) {
@@ -868,6 +870,42 @@
   .vsplit-parts { margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   .vsplit-parts div { font-size:11px; color:var(--muted); }
   .vsplit-parts div b { display:block; font-size:14px; color:var(--text); font-variant-numeric: tabular-nums; }
+  .act-note { font-size: 12px; color: var(--muted); margin: -8px 0 12px; line-height: 1.6; }
+  .act-sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 4px; line-height: 1.5; }
+  .act-sub .over { color: var(--expense); font-weight: 600; }
+  .act-sub .ok { color: var(--income); font-weight: 600; }
+  .act-sub .warn { color: #b45309; font-weight: 600; }
+  .mini-btn { width: auto; padding: 3px 10px; font-size: 12px; border-radius: 6px; }
+  .budget-row .delete-btn { margin-left: 6px; }
+  .review-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .review-row:last-child { border-bottom: none; }
+  .review-row .rv-main { font-weight: 600; }
+  .review-row .rv-amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .review-row .rv-amt b { color: var(--expense); }
+  .rank-table td, .rank-table th { padding: 6px 4px; font-size: 13px; }
+  .rank-table td.num, .rank-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rank-table td.nm { word-break: break-all; }
+  .rank-table tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fef3c7; color: #92400e; margin-left: 4px; white-space: nowrap; }
+  .flow-sub { grid-column: 2 / -1; font-size: 11px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+  .flow-sub .stale { color: #b45309; font-weight: 600; }
+  .flow-sub .done { color: var(--income); font-weight: 600; }
+  .acc-sub { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; padding: 4px 10px 8px 34px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+  .acc-sub input { width: 120px; text-align: right; padding: 4px 8px; font-size: 12px; }
+  .acc-sub .good { color: var(--income); font-weight: 600; }
+  .acc-sub .bad { color: var(--expense); font-weight: 600; }
+  .account-row.has-sub { border-bottom: none; }
+  .recon-table td { padding: 7px 4px; font-size: 13px; }
+  .recon-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .recon-table tr.total td { font-weight: 700; border-top: 2px solid var(--border); }
+  .recon-table tr.gap td { background: #fffbeb; font-weight: 700; }
+  .recon-verdict { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.6; background: var(--bg); }
+  .recon-verdict.ok { background: #ecfdf5; color: #065f46; }
+  .recon-verdict.ng { background: #fffbeb; color: #92400e; }
+  .recon-hist { margin-top: 14px; overflow-x: auto; }
+  .recon-hist table { min-width: 520px; }
+  .recon-hist td, .recon-hist th { padding: 5px 4px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .recon-hist td:first-child, .recon-hist th:first-child { text-align: left; }
   .badge {
     display: inline-block;
     padding: 2px 8px;
@@ -948,6 +986,63 @@
       <div>📝 変動費項目<b id="vs-items">¥0</b></div>
     </div>
     <div class="vsplit-sub" style="margin-top:8px;" id="vs-allow">固定費のうち小遣い(K+C): ¥0</div>
+  </section>
+
+  <section class="card form-card" id="budget-card">
+    <h2>🎯 予算 (変動費) <span class="badge" id="budget-month">—</span></h2>
+    <p class="act-note">カテゴリごとに月の上限を決めて、残りと月末の着地見込みを確認します。着地見込みは当月のみ表示 (今日までの明細を日割りで延長。クレカ明細を取り込んだ日までが対象です)。</p>
+    <div class="budget-list" id="budget-list"></div>
+    <div class="budget-edit">
+      <select id="budget-cat" aria-label="予算カテゴリ"></select>
+      <input type="text" inputmode="numeric" id="budget-amount" placeholder="月の予算 (円)" aria-label="月の予算" />
+      <button type="button" class="primary" id="budget-save">設定</button>
+      <button type="button" id="budget-auto" title="未設定のカテゴリに、直近6か月の平均を1,000円単位 (切り上げ) で設定します">未設定分を直近平均で埋める</button>
+    </div>
+  </section>
+
+  <section class="card form-card" id="review-card">
+    <h2>🔍 見直し候補 <span class="badge" id="review-basis">—</span></h2>
+    <p class="act-note">前月ではなく、直近6か月 (明細のある月) の平均と比べて上振れしているカテゴリを、金額の大きい順に表示します。</p>
+    <div id="review-list"></div>
+    <div class="act-sub" id="review-down"></div>
+  </section>
+
+  <section class="form-card grid-2">
+    <div class="card">
+      <h2>🏪 店舗別ランキング
+        <select id="merchant-period" style="width:auto;font-size:12px;padding:2px 6px;margin-left:8px;" aria-label="集計期間">
+          <option value="1">今月</option>
+          <option value="3">直近3か月</option>
+          <option value="12">直近12か月</option>
+        </select>
+      </h2>
+      <div id="merchant-list"></div>
+    </div>
+    <div class="card">
+      <h2>🔁 定期課金 (毎月ほぼ同額)</h2>
+      <p class="act-note">直近6か月のうち3か月以上、月1回・ほぼ同額で請求されている店舗です。年払いのものは検出できません。</p>
+      <div id="recurring-list"></div>
+    </div>
+  </section>
+
+  <section class="card form-card" id="ai-card">
+    <h2>🤖 Claudeで分析</h2>
+    <p class="act-note">表示月を終点とした期間の集計データを、分析の依頼文つきで作成します。コピーしてClaudeのチャットに貼り付けると、傾向の分析や見直しの提案を受けられます。データはこの端末の中で作成され、自動では送信されません (貼り付けた内容だけがClaudeに渡ります)。</p>
+    <div class="budget-edit" style="margin-top:0;">
+      <select id="ai-period" aria-label="分析期間">
+        <option value="3">直近3か月</option>
+        <option value="6" selected>直近6か月</option>
+        <option value="12">直近12か月</option>
+        <option value="24">直近24か月</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:13px;flex:1;min-width:200px;">
+        <input type="checkbox" id="ai-names" checked style="width:auto;" /> 店舗名・口座名・メモを含める
+      </label>
+      <button type="button" class="primary" id="ai-copy">作成してコピー</button>
+      <button type="button" id="ai-save">ファイルで保存 (.md)</button>
+    </div>
+    <div class="act-sub" id="ai-status"></div>
+    <textarea id="ai-output" readonly rows="8" aria-label="分析用データ" placeholder="ここに分析用データが表示されます" style="width:100%;margin-top:10px;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:1.5;display:none;"></textarea>
   </section>
 
   <section class="form-card grid-2">
@@ -1189,6 +1284,7 @@
 
   <section class="card form-card">
     <h2>🏠 固定費 <span class="badge" id="flow-fixed-month">—</span></h2>
+    <p class="act-note" id="flow-fixed-review">—</p>
     <div class="flow-item-list" id="flow-fixed-list"></div>
     <div class="flow-add">
       <input type="text" id="flow-fixed-name" placeholder="項目名 (例: 家賃 / NHK / Netflix)" />
@@ -1240,6 +1336,16 @@
         <div class="stock-diff" id="stock-net-diff"></div>
       </div>
     </div>
+  </section>
+
+  <section class="card form-card" id="recon-card">
+    <h2>🧮 フローとストックの突合 <span class="badge" id="recon-month">—</span></h2>
+    <p class="act-note">純資産の増減を「収支」「評価損益」「為替」に分け、説明のつかない差額を使途不明金として表示します。投資口座は口座一覧で「今月の入金額」を入れると、入金と評価損益を分けられます。</p>
+    <div id="recon-body"></div>
+    <div class="recon-hist" id="recon-hist"></div>
+    <p class="act-sub" style="margin-top:10px;">
+      差が出やすい原因: ①クレカは利用月に支出計上されるが引落は翌月以降 (未払い残高を負債口座として登録すると一致しやすくなります) ②負担がK・C・立替の明細は収支に含まれない ③収入・支出の記録漏れ ④ストックに登録していない口座との資金移動。
+    </p>
   </section>
 
   <section class="form-card grid-2">
@@ -1564,6 +1670,7 @@
   }
   function saveBudgets() { localStorage.setItem(BUDGET_KEY, JSON.stringify(budgets)); scheduleCloudPush(); }
   function fmt(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
+  function localToday() { const d = new Date(); return ym(d) + '-' + String(d.getDate()).padStart(2, '0'); } // UTCではなく端末の日付
   function ym(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
   function monthLabel(d) { return d.getFullYear() + '年 ' + (d.getMonth() + 1) + '月'; }
 
@@ -1641,6 +1748,7 @@
     document.getElementById('stat-subsidy').textContent = fmt(subsidyTotal);
 
     renderVariableCard(monthKey, prevKey);
+    renderActions(monthKey);
     renderIncomeChart(monthIncomes);
     renderPersonal(monthEntries);
 
@@ -1830,7 +1938,8 @@
   function sanitizeBudgets(b) {
     if (!b || typeof b !== 'object') return {};
     const out = {};
-    for (const cat of allCategories('expense')) {
+    for (const cat of Object.keys(b)) {
+      if (typeof cat !== 'string' || !cat || cat.length > 40) continue;
       const v = Number(b[cat]);
       if (Number.isFinite(v) && v > 0) out[cat] = Math.round(v);
     }
@@ -1942,6 +2051,487 @@
         `<div class="row"><span>${escapeHtml(n)}</span><span>${fmt(v)}</span></div>`
       ).join('');
     }
+  }
+
+
+  // ====== アクションにつなげる機能: 予算 / 見直し候補 / 店舗別 / 定期課金 ======
+  const BUDGET_TOTAL = '変動費合計';
+  let merchantPeriod = 1;
+  function addMonths(monthKey, n) {
+    const [y, m] = monthKey.split('-').map(Number);
+    return ym(new Date(y, m - 1 + n, 1));
+  }
+  function familyExpenses(monthKey) {
+    return entries.filter(e => e.date.startsWith(monthKey) && e.type === 'expense' && isFamily(e));
+  }
+  function entryCat(e) {
+    return e.category === 'クレカ'
+      ? (CC_SUBCATEGORIES.includes(e.subCategory) ? e.subCategory : classifyMerchant(e.memo))
+      : e.category;
+  }
+  // 変動費のカテゴリ別内訳 (spendBreakdown の variable と合計が一致する)。
+  // ent = 明細 (日割りで延長できる)、item = フロータブの変動費項目 (月額のかたまり)
+  function variableByCategory(monthKey) {
+    const map = {};
+    const add = (cat, k, v) => { if (!map[cat]) map[cat] = { ent: 0, item: 0 }; map[cat][k] += v; };
+    for (const e of familyExpenses(monthKey)) {
+      if (e.category !== 'クレカ' && /小遣い/.test(e.category)) continue; // 手入力の小遣いは固定費
+      add(entryCat(e), 'ent', e.amount);
+    }
+    for (const it of flow.items.filter(x => x.group === '変動費')) {
+      const v = flowAmountFor(it.id, monthKey);
+      if (v) add(it.name, 'item', v);
+    }
+    return map;
+  }
+  function catTotal(map, cat) {
+    if (cat === BUDGET_TOTAL) return Object.values(map).reduce((s, x) => ({ ent: s.ent + x.ent, item: s.item + x.item }), { ent: 0, item: 0 });
+    return map[cat] || { ent: 0, item: 0 };
+  }
+  // 直近 n か月 (対象月は含めない) のうち、家族の支出明細がある月
+  function baseMonths(monthKey, n) {
+    const out = [];
+    for (let i = 1; i <= n; i++) {
+      const k = addMonths(monthKey, -i);
+      if (familyExpenses(k).length > 0) out.push(k);
+    }
+    return out;
+  }
+  function categoryAverages(monthKey, n) {
+    const months = baseMonths(monthKey, n);
+    const sum = {};
+    for (const k of months) {
+      const m = variableByCategory(k);
+      for (const cat in m) sum[cat] = (sum[cat] || 0) + m[cat].ent + m[cat].item;
+    }
+    const avg = {};
+    for (const cat in sum) avg[cat] = sum[cat] / months.length;
+    return { avg, n: months.length };
+  }
+  function budgetCategories() {
+    const set = new Set([BUDGET_TOTAL]);
+    CC_SUBCATEGORIES.filter(c => !/小遣い/.test(c)).forEach(c => set.add(c));
+    flow.items.filter(x => x.group === '変動費').forEach(x => set.add(x.name));
+    Object.keys(budgets).forEach(c => set.add(c));
+    return Array.from(set);
+  }
+  function paceInfo(monthKey) {
+    const now = new Date();
+    const [y, m] = monthKey.split('-').map(Number);
+    const days = new Date(y, m, 0).getDate();
+    const isCurrent = ym(now) === monthKey;
+    return { isCurrent, day: isCurrent ? now.getDate() : days, days };
+  }
+  function signedYen(v) { return Math.abs(v) < 0.5 ? '±¥0' : (v < 0 ? '-' : '+') + fmt(Math.abs(v)); }
+
+  function renderBudgets(monthKey) {
+    document.getElementById('budget-month').textContent = monthLabel(viewMonth);
+    const sel = document.getElementById('budget-cat');
+    const keep = sel.value;
+    const cats = budgetCategories();
+    sel.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}${budgets[c] ? ' (設定済)' : ''}</option>`).join('');
+    if (cats.includes(keep)) sel.value = keep;
+    const el = document.getElementById('budget-list');
+    const set = cats.filter(c => budgets[c] > 0);
+    if (set.length === 0) {
+      el.innerHTML = `<div class="budget-empty">予算はまだありません。まず「${BUDGET_TOTAL}」と、金額の大きいカテゴリ2〜3個に上限を設定するのがおすすめです。</div>`;
+      return;
+    }
+    const map = variableByCategory(monthKey);
+    const pace = paceInfo(monthKey);
+    el.innerHTML = set.map(cat => {
+      const b = budgets[cat];
+      const t = catTotal(map, cat);
+      const actual = t.ent + t.item;
+      const pct = b > 0 ? (actual / b) * 100 : 0;
+      const remain = b - actual;
+      const proj = pace.isCurrent ? t.ent / pace.day * pace.days + t.item : null;
+      let cls = '';
+      if (pct >= 100) cls = 'over';
+      else if (pct >= 80 || (proj !== null && proj > b)) cls = 'warn';
+      let sub = remain >= 0
+        ? `残り <span class="ok">${fmt(remain)}</span>`
+        : `<span class="over">${fmt(-remain)} 超過</span>`;
+      if (pace.isCurrent) {
+        const left = pace.days - pace.day;
+        if (remain > 0 && left > 0) sub += ` ／ 残り${left}日で1日あたり ${fmt(remain / left)}`;
+        sub += proj > b
+          ? ` ／ 着地見込み ${fmt(proj)} (<span class="over">${fmt(proj - b)} 超過ペース</span>)`
+          : ` ／ 着地見込み ${fmt(proj)} (<span class="ok">予算内</span>)`;
+      }
+      return `<div class="budget-row">
+        <div class="budget-head">
+          <span class="budget-cat">${escapeHtml(cat)}</span>
+          <span class="budget-nums">${fmt(actual)} / ${fmt(b)}<span class="pct">${pct.toFixed(0)}%</span><button type="button" class="delete-btn" data-budget-delete="${escapeHtml(cat)}" title="この予算を削除">×</button></span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill ${cls}" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>
+        <div class="act-sub">${sub}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderReview(monthKey) {
+    const { avg, n } = categoryAverages(monthKey, 6);
+    const basis = document.getElementById('review-basis');
+    const listEl = document.getElementById('review-list');
+    const downEl = document.getElementById('review-down');
+    downEl.textContent = '';
+    if (n === 0) {
+      basis.textContent = '比較データなし';
+      listEl.innerHTML = `<div class="budget-empty">比較できる過去の月がまだありません (前月以前の明細が必要です)。</div>`;
+      return;
+    }
+    const pace = paceInfo(monthKey);
+    basis.textContent = `${monthLabel(viewMonth)} ・ 過去${n}か月平均と比較` + (pace.isCurrent ? ` ・ ${pace.day}日時点の実績` : '');
+    const map = variableByCategory(monthKey);
+    const cats = new Set(Object.keys(map).concat(Object.keys(avg)));
+    const rows = [];
+    for (const cat of cats) {
+      const t = catTotal(map, cat);
+      const actual = t.ent + t.item;
+      const a = avg[cat] || 0;
+      rows.push({ cat, actual, avg: a, diff: actual - a });
+    }
+    const ups = rows.filter(r => r.diff >= 3000 && (r.avg === 0 || r.diff / r.avg >= 0.1)).sort((x, y) => y.diff - x.diff).slice(0, 3);
+    if (ups.length === 0) {
+      listEl.innerHTML = `<div class="budget-empty">平均を上回っているカテゴリはありません${pace.isCurrent ? ' (月途中のため、月末に向けて増える可能性があります)' : ''}。</div>`;
+    } else {
+      listEl.innerHTML = ups.map(r => {
+        const top = familyExpenses(monthKey)
+          .filter(e => !(e.category !== 'クレカ' && /小遣い/.test(e.category)) && entryCat(e) === r.cat && e.amount > 0)
+          .sort((x, y) => y.amount - x.amount).slice(0, 2)
+          .map(e => `${escapeHtml(e.memo || e.category)} ${fmt(e.amount)}`).join('、');
+        const ratio = r.avg > 0 ? ` (+${(r.diff / r.avg * 100).toFixed(0)}%)` : ' (過去の計上なし)';
+        const bud = budgets[r.cat]
+          ? `予算 ${fmt(budgets[r.cat])}`
+          : (r.avg >= 1000 ? `<button type="button" class="mini-btn" data-budget-from-avg="${escapeHtml(r.cat)}" data-avg="${Math.round(r.avg / 1000) * 1000}">平均 ${fmt(Math.round(r.avg / 1000) * 1000)} を予算にする</button>` : '予算未設定');
+        return `<div class="review-row">
+          <div>
+            <div class="rv-main">${escapeHtml(r.cat)}</div>
+            <div class="act-sub">${top ? '大きい明細: ' + top : 'フロータブの変動費項目'}</div>
+            <div class="act-sub">${bud}</div>
+          </div>
+          <div class="rv-amt"><b>${signedYen(r.diff)}</b>${ratio}<div class="act-sub">今月 ${fmt(r.actual)} ／ 平均 ${fmt(r.avg)}</div></div>
+        </div>`;
+      }).join('');
+    }
+    if (!pace.isCurrent) {
+      const downs = rows.filter(r => r.diff <= -3000).sort((x, y) => x.diff - y.diff).slice(0, 3);
+      if (downs.length) downEl.textContent = '平均より抑えられたカテゴリ: ' + downs.map(r => `${r.cat} ${signedYen(r.diff)}`).join(' ／ ');
+    }
+  }
+
+  function merchantGroups(monthKeys) {
+    const g = new Map();
+    for (const k of monthKeys) {
+      for (const e of familyExpenses(k)) {
+        if (!e.memo || !e.memo.trim()) continue;
+        if (e.category !== 'クレカ' && /小遣い/.test(e.category)) continue;
+        const key = normMemo(e.memo);
+        if (!g.has(key)) g.set(key, { name: e.memo.trim(), last: e.date, cat: entryCat(e), list: [] });
+        const o = g.get(key);
+        if (e.date >= o.last) { o.last = e.date; o.name = e.memo.trim(); o.cat = entryCat(e); }
+        o.list.push(e);
+      }
+    }
+    return g;
+  }
+  function renderMerchants(monthKey) {
+    const keys = [];
+    for (let i = 0; i < merchantPeriod; i++) keys.push(addMonths(monthKey, -i));
+    const g = merchantGroups(keys);
+    const rows = Array.from(g.values()).map(o => ({ name: o.name, cat: o.cat, count: o.list.length, amount: o.list.reduce((s, e) => s + e.amount, 0) }))
+      .filter(r => r.amount > 0).sort((a, b) => b.amount - a.amount);
+    const el = document.getElementById('merchant-list');
+    if (rows.length === 0) { el.innerHTML = `<div class="budget-empty">この期間に店舗名(メモ)つきの明細はありません。</div>`; return; }
+    const total = rows.reduce((s, r) => s + r.amount, 0);
+    const top = rows.slice(0, 10);
+    const topSum = top.reduce((s, r) => s + r.amount, 0);
+    el.innerHTML = `<table class="rank-table"><thead><tr><th>店舗</th><th class="num">回数</th><th class="num">金額</th><th class="num">割合</th></tr></thead><tbody>` +
+      top.map((r, i) => `<tr><td class="nm">${i + 1}. ${escapeHtml(r.name)}<div class="act-sub" style="margin:0;">${escapeHtml(r.cat)}${r.count > 1 ? ` ・ 1回あたり ${fmt(r.amount / r.count)}` : ''}</div></td><td class="num">${r.count}</td><td class="num">${fmt(r.amount)}</td><td class="num">${(r.amount / total * 100).toFixed(1)}%</td></tr>`).join('') +
+      `<tr class="total"><td>上位${top.length}店 計 (全${rows.length}店)</td><td></td><td class="num">${fmt(topSum)}</td><td class="num">${(topSum / total * 100).toFixed(1)}%</td></tr></tbody></table>`;
+  }
+  // 定期課金: 直近6か月のうち3か月以上で、月1回・ほぼ同額 (ばらつき15%以内)、かつ直近2か月に請求があるもの
+  function detectRecurring(monthKey) {
+    const keys = [];
+    for (let i = 0; i < 6; i++) keys.push(addMonths(monthKey, -i));
+    const g = merchantGroups(keys);
+    const out = [];
+    for (const o of g.values()) {
+      const byMonth = {};
+      for (const e of o.list) { const k = e.date.slice(0, 7); (byMonth[k] = byMonth[k] || []).push(e); }
+      const months = Object.keys(byMonth).sort();
+      if (months.length < 3) continue;
+      if (months.filter(k => byMonth[k].length === 1).length / months.length < 0.8) continue;
+      const amts = months.map(k => byMonth[k].reduce((s, e) => s + e.amount, 0));
+      if (amts.some(a => a <= 0)) continue;
+      const sorted = amts.slice().sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      if ((sorted[sorted.length - 1] - sorted[0]) / median > 0.15) continue;
+      const lastMonth = months[months.length - 1];
+      if (lastMonth < addMonths(monthKey, -1)) continue; // 直近2か月に請求がなければ解約済みとみなす
+      const latest = amts[amts.length - 1];
+      out.push({ name: o.name, cat: o.cat, monthly: latest, months: months.length, raised: latest > amts[0] ? latest - amts[0] : 0, missing: lastMonth !== monthKey });
+    }
+    return out.sort((a, b) => b.monthly - a.monthly);
+  }
+  function renderRecurring(monthKey) {
+    const rows = detectRecurring(monthKey);
+    const el = document.getElementById('recurring-list');
+    if (rows.length === 0) { el.innerHTML = `<div class="budget-empty">該当する定期課金は見つかりませんでした (3か月分以上の明細が必要です)。</div>`; return; }
+    const sum = rows.reduce((s, r) => s + r.monthly, 0);
+    el.innerHTML = `<table class="rank-table"><thead><tr><th>店舗</th><th class="num">月額</th><th class="num">年額換算</th></tr></thead><tbody>` +
+      rows.map(r => `<tr><td class="nm">${escapeHtml(r.name)}${r.raised ? `<span class="tag">値上げ +${fmt(r.raised)}</span>` : ''}${r.missing ? `<span class="tag">今月は未請求</span>` : ''}<div class="act-sub" style="margin:0;">${escapeHtml(r.cat)} ・ 6か月中${r.months}か月</div></td><td class="num">${fmt(r.monthly)}</td><td class="num">${fmt(r.monthly * 12)}</td></tr>`).join('') +
+      `<tr class="total"><td>計 ${rows.length}件</td><td class="num">${fmt(sum)}</td><td class="num">${fmt(sum * 12)}</td></tr></tbody></table>`;
+  }
+  function renderActions(monthKey) {
+    renderBudgets(monthKey);
+    renderReview(monthKey);
+    renderMerchants(monthKey);
+    renderRecurring(monthKey);
+  }
+  function setupActions() {
+    const setBudget = (cat, v) => {
+      if (!cat) return;
+      if (Number.isFinite(v) && v > 0) budgets[cat] = Math.round(v); else delete budgets[cat];
+      saveBudgets();
+      renderActions(ym(viewMonth));
+    };
+    document.getElementById('budget-save').addEventListener('click', () => {
+      const cat = document.getElementById('budget-cat').value;
+      const v = parseNumInput(document.getElementById('budget-amount').value);
+      if (!Number.isFinite(v) || v <= 0) { alert('予算の金額を入力してください (削除は各行の × から)'); return; }
+      setBudget(cat, v);
+      document.getElementById('budget-amount').value = '';
+    });
+    document.getElementById('budget-amount').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) document.getElementById('budget-save').click();
+    });
+    document.getElementById('budget-auto').addEventListener('click', () => {
+      const mk = ym(viewMonth);
+      const { avg, n } = categoryAverages(mk, 6);
+      if (n === 0) { alert('過去の月の明細がないため、平均を計算できません'); return; }
+      let added = 0, total = 0;
+      for (const cat in avg) {
+        total += avg[cat];
+        if (budgets[cat]) continue;
+        const v = Math.ceil(avg[cat] / 1000) * 1000;
+        if (avg[cat] >= 500) { budgets[cat] = v; added++; }
+      }
+      if (!budgets[BUDGET_TOTAL] && total >= 1000) { budgets[BUDGET_TOTAL] = Math.ceil(total / 1000) * 1000; added++; }
+      saveBudgets();
+      renderActions(mk);
+      alert(added ? `${added}件の予算を、過去${n}か月の平均で設定しました。平均は「現状維持」の水準なので、削りたいカテゴリは金額を下げてください。` : '未設定のカテゴリはありませんでした');
+    });
+    document.getElementById('budget-list').addEventListener('click', (e) => {
+      const cat = e.target.dataset.budgetDelete;
+      if (cat && confirm(`「${cat}」の予算を削除しますか?`)) setBudget(cat, 0);
+    });
+    document.getElementById('review-list').addEventListener('click', (e) => {
+      const cat = e.target.dataset.budgetFromAvg;
+      if (cat) setBudget(cat, Number(e.target.dataset.avg));
+    });
+    document.getElementById('merchant-period').addEventListener('change', (e) => {
+      merchantPeriod = Number(e.target.value) || 1;
+      renderMerchants(ym(viewMonth));
+    });
+  }
+
+  // ====== Claudeで分析: 期間の集計データを依頼文つきのテキスト(Markdown)にまとめる ======
+  function buildAnalysisReport(endKey, nMonths, withNames) {
+    const allKeys = [];
+    for (let i = nMonths - 1; i >= 0; i--) allKeys.push(addMonths(endKey, -i));
+    const hasData = (k) => entries.some(e => e.date.startsWith(k) && isFamily(e));
+    const keys = allKeys.filter(hasData);
+    const nowKey = ym(new Date());
+    const partial = keys.includes(nowKey) ? nowKey : null;
+    const n = (v) => String(Math.round(v));
+    const lab = (k) => k.replace('-', '/') + (k === partial ? '*' : '');
+    const row = (cells) => '| ' + cells.join(' | ') + ' |';
+    const table = (head, rows) => rows.length ? [row(head), row(head.map(() => '---'))].concat(rows.map(row)).join('\n') : '(該当データなし)';
+    const out = [];
+    out.push('# 家計の分析依頼');
+    out.push('');
+    out.push('以下は家計簿アプリ「かんたん家計簿」から出力した集計データです。このデータだけを根拠に、次の観点で分析してください。');
+    out.push('');
+    out.push('1. 支出の傾向と異常値 (増えているカテゴリ、単発の大型支出、季節要因の切り分け)');
+    out.push('2. 削減余地の大きい順に3〜5項目 (根拠の数字と、月あたり・年あたりの削減見込み額)');
+    out.push('3. 固定費と定期課金の見直し優先順位 (年額の大きさと見直し状況から)');
+    out.push('4. 予算の妥当性と改定案 (カテゴリ別の具体的な金額)');
+    out.push('5. 収支・貯蓄率の推移と、このペースでの年間着地');
+    out.push('6. フローとストックの突合から見える記録漏れや管理上の問題');
+    out.push('7. データの不足や偏りのせいで結論が弱くなる箇所');
+    out.push('');
+    out.push('結論を先に述べ、数字は必ずこのデータから引用してください。推測は推測と明記してください。最後に、今月すぐ実行できる行動を3つ挙げてください。');
+    out.push('');
+    out.push('## 前提');
+    out.push(`- 出力日: ${localToday()} ／ 対象期間: ${allKeys[0].replace('-', '/')}〜${endKey.replace('-', '/')} (${nMonths}か月) ／ うち明細のある月: ${keys.length}か月`);
+    out.push('- 金額の単位は円。集計対象は負担が「家族」の明細のみ (負担がK・C・立替の明細は、個人別の表にだけ出ます)');
+    out.push('- 固定費 = フロータブの固定費項目 + 手入力の小遣い。変動費 = それ以外すべて (クレカ + 手入力 + 変動費項目)。支出 = 固定費 + 変動費');
+    out.push('- 給与(K)は財形貯蓄の天引き後の手取り。貯蓄率 = (収支 + 財形) ÷ (収入 + 財形)');
+    out.push('- クレカは利用日の月に支出として計上 (引落月ではない)');
+    if (partial) out.push(`- *印の ${partial.replace('-', '/')} は月の途中 (${new Date().getDate()}日時点)。他の月と単純比較しないでください`);
+    if (keys.length === 0) { out.push(''); out.push('この期間に明細がありません。'); return out.join('\n'); }
+
+    // 月別サマリ
+    out.push('');
+    out.push('## 月別の収支');
+    const mrows = [];
+    let tInc = 0, tExp = 0, tFix = 0, tVar = 0, tZk = 0;
+    for (const k of keys) {
+      const inc = entries.filter(e => e.date.startsWith(k) && e.type === 'income' && isFamily(e)).reduce((a, e) => a + e.amount, 0);
+      const b = spendBreakdown(k);
+      const zk = zaikeiFor(k);
+      const net = inc - b.total;
+      const rate = (inc + zk) > 0 ? ((net + zk) / (inc + zk) * 100).toFixed(1) : '—';
+      tInc += inc; tExp += b.total; tFix += b.fixed; tVar += b.variable; tZk += zk;
+      mrows.push([lab(k), n(inc), n(b.total), n(b.fixed), n(b.variable), n(net), n(zk), rate]);
+    }
+    const tRate = (tInc + tZk) > 0 ? ((tInc - tExp + tZk) / (tInc + tZk) * 100).toFixed(1) : '—';
+    mrows.push(['合計', n(tInc), n(tExp), n(tFix), n(tVar), n(tInc - tExp), n(tZk), tRate]);
+    mrows.push(['月平均', n(tInc / keys.length), n(tExp / keys.length), n(tFix / keys.length), n(tVar / keys.length), n((tInc - tExp) / keys.length), n(tZk / keys.length), '']);
+    out.push(table(['月', '収入', '支出', 'うち固定費', 'うち変動費', '収支', '財形', '貯蓄率%'], mrows));
+
+    // 収入の内訳
+    out.push('');
+    out.push('## 収入の内訳 (期間合計)');
+    const incBy = {};
+    for (const k of keys) for (const e of entries.filter(e => e.date.startsWith(k) && e.type === 'income' && isFamily(e))) incBy[e.category] = (incBy[e.category] || 0) + e.amount;
+    out.push(table(['区分', '合計', '月平均'], Object.entries(incBy).sort((a, b) => b[1] - a[1]).map(([c, v]) => [c, n(v), n(v / keys.length)])));
+
+    // 変動費カテゴリ × 月
+    out.push('');
+    out.push('## 変動費のカテゴリ別・月別');
+    const catM = {};
+    for (const k of keys) { const m = variableByCategory(k); for (const c in m) { (catM[c] = catM[c] || {})[k] = m[c].ent + m[c].item; } }
+    const catRows = Object.keys(catM).map(c => ({ c, sum: keys.reduce((a, k) => a + (catM[c][k] || 0), 0) })).sort((a, b) => b.sum - a.sum);
+    out.push(table(['カテゴリ'].concat(keys.map(lab)).concat(['合計', '月平均', '構成比%']),
+      catRows.map(r => [r.c].concat(keys.map(k => n(catM[r.c][k] || 0))).concat([n(r.sum), n(r.sum / keys.length), tVar > 0 ? (r.sum / tVar * 100).toFixed(1) : '—']))));
+
+    // 固定費
+    out.push('');
+    out.push(`## 固定費の項目 (${endKey.replace('-', '/')}時点の月額)`);
+    const fx = flow.items.filter(x => x.group === '固定費').map(x => ({ x, amt: flowAmountFor(x.id, endKey) })).filter(o => o.amt > 0).sort((a, b) => b.amt - a.amt);
+    out.push(table(['項目', '月額', '年額', '最終見直し'], fx.map(o => [o.x.name, n(o.amt), n(o.amt * 12), o.x.reviewed ? o.x.reviewed.replace('-', '/') : '未見直し'])));
+
+    // 予算
+    out.push('');
+    out.push('## 予算と実績');
+    const full = keys.filter(k => k !== partial);
+    const bcats = Object.keys(budgets).filter(c => budgets[c] > 0);
+    if (bcats.length === 0) out.push('(予算は未設定)');
+    else {
+      out.push(table(['カテゴリ', '月の予算', '月平均の実績', '超過した月数'], bcats.map(c => {
+        const vals = full.map(k => { const t = catTotal(variableByCategory(k), c); return t.ent + t.item; });
+        const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+        return [c, n(budgets[c]), vals.length ? n(avg) : '—', `${vals.filter(v => v > budgets[c]).length}/${vals.length}`];
+      })));
+      out.push('※実績と超過月数は、月途中の当月を除いて計算');
+    }
+
+    // 定期課金
+    out.push('');
+    out.push('## 定期課金 (毎月ほぼ同額の請求。直近6か月から自動検出)');
+    const rec = detectRecurring(endKey);
+    out.push(table(['店舗', 'カテゴリ', '月額', '年額換算', '備考'], rec.map((r, i) => [withNames ? r.name : `定期課金${i + 1}`, r.cat, n(r.monthly), n(r.monthly * 12), [r.raised ? `値上げ+${n(r.raised)}` : '', r.missing ? '今月未請求' : ''].filter(Boolean).join(' ')])));
+
+    if (withNames) {
+      out.push('');
+      out.push('## 店舗別の支出 上位20 (期間合計)');
+      const g = merchantGroups(keys);
+      const ms = Array.from(g.values()).map(o => ({ name: o.name, cat: o.cat, count: o.list.length, amount: o.list.reduce((a, e) => a + e.amount, 0) })).filter(r => r.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 20);
+      out.push(table(['店舗', 'カテゴリ', '回数', '金額', '1回あたり'], ms.map(r => [r.name, r.cat, String(r.count), n(r.amount), n(r.amount / r.count)])));
+      out.push('');
+      out.push('## 単発の大きい明細 上位15');
+      const big = [];
+      for (const k of keys) for (const e of familyExpenses(k)) if (e.amount > 0 && !(e.category !== 'クレカ' && /小遣い/.test(e.category))) big.push(e);
+      big.sort((a, b) => b.amount - a.amount);
+      out.push(table(['日付', '店舗・メモ', 'カテゴリ', '金額'], big.slice(0, 15).map(e => [e.date, (e.memo || '').trim() || '(メモなし)', entryCat(e), n(e.amount)])));
+    }
+
+    // 個人別
+    out.push('');
+    out.push('## 個人負担・立替の支出 (家族の収支には含まれない)');
+    out.push(table(['月', 'K負担', 'C負担', '立替'], keys.map(k => {
+      const ex = entries.filter(e => e.date.startsWith(k) && e.type === 'expense');
+      const s = (p) => n(ex.filter(e => payerOf(e) === p).reduce((a, e) => a + e.amount, 0));
+      return [lab(k), s('K'), s('C'), s('立替')];
+    })));
+
+    // ストック
+    out.push('');
+    out.push('## ストック (月末残高・円換算)');
+    const firstSnap = Object.keys(assets.snapshots).sort()[0];
+    const sKeys = firstSnap ? allKeys.filter(k => k >= firstSnap) : [];
+    if (assets.accounts.length === 0 || sKeys.length === 0) out.push('(ストックの記録なし)');
+    else {
+      out.push(table(['月', '預金', '投資', '負債', '純資産', '入力済み口座'], sKeys.map(k => {
+        const t = { '預金': 0, '投資': 0, '負債': 0 };
+        let filled = 0;
+        for (const a of assets.accounts) {
+          if (hasBalance(a.id, k)) filled++;
+          const j = toJPY(balanceFor(a.id, k), a.currency, k);
+          if (j !== null) t[a.type] += j;
+        }
+        return [k.replace('-', '/'), n(t['預金']), n(t['投資']), n(t['負債']), n(t['預金'] + t['投資'] - t['負債']), `${filled}/${assets.accounts.length}`];
+      })));
+      out.push('※未入力の口座は直前の月末残高を引き継いで計算');
+      out.push('');
+      out.push('### フローとストックの突合');
+      out.push('純資産の増減 = (収支+財形) + 評価損益 + 為替の影響 − 使途不明金。使途不明金がプラスなら、家計簿上は残るはずのお金がストックに現れていない (支出の記録漏れなど)。');
+      const rrows = [];
+      for (const k of sKeys) {
+        const r = reconcile(k);
+        if (r.used === 0) continue;
+        rrows.push([k.replace('-', '/'), n(r.saving), n(r.gain), n(r.fx), n(r.dNw), n(r.gap), [r.unfilled ? `未入力${r.unfilled}口座` : '', r.hasInvest && !r.contribSet ? '投資の入金額未入力' : '', !r.hasFlow ? '明細なし' : ''].filter(Boolean).join(' ')]);
+      }
+      out.push(table(['月', '収支+財形', '投資の評価損益', '為替の影響', '純資産の増減', '使途不明金', '注意'], rrows));
+      out.push('');
+      const lastS = sKeys[sKeys.length - 1];
+      out.push(`### 口座別の残高 (${lastS.replace('-', '/')}末)`);
+      const idx = { '預金': 0, '投資': 0, '負債': 0 };
+      out.push(table(['口座', '種別', '通貨', '残高', '円換算'], assets.accounts.map(a => {
+        idx[a.type]++;
+        const b = balanceFor(a.id, lastS);
+        const j = toJPY(b, a.currency, lastS);
+        return [withNames ? a.name : `${a.type}${idx[a.type]}`, a.type, a.currency, String(Math.round(b * 100) / 100), j === null ? 'レート未設定' : n(j)];
+      })));
+    }
+    return out.join('\n');
+  }
+  function setupAnalysis() {
+    const status = document.getElementById('ai-status');
+    const outEl = document.getElementById('ai-output');
+    const build = () => {
+      const months = Number(document.getElementById('ai-period').value) || 6;
+      const text = buildAnalysisReport(ym(viewMonth), months, document.getElementById('ai-names').checked);
+      outEl.value = text;
+      outEl.style.display = '';
+      return { text, months };
+    };
+    document.getElementById('ai-copy').addEventListener('click', async () => {
+      const { text, months } = build();
+      let ok = false;
+      try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); ok = true; } } catch {}
+      if (!ok) {
+        try { outEl.focus(); outEl.select(); outEl.setSelectionRange(0, text.length); ok = document.execCommand('copy'); } catch {}
+      }
+      status.textContent = ok
+        ? `✓ ${monthLabel(viewMonth)}までの直近${months}か月分をコピーしました (${text.length.toLocaleString('ja-JP')}文字)。Claudeのチャットに貼り付けて送信してください。`
+        : '自動コピーできませんでした。下の欄を長押し (またはクリック) して全選択し、コピーしてください。';
+    });
+    document.getElementById('ai-save').addEventListener('click', () => {
+      const { text, months } = build();
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kakeibo-analysis-${ym(viewMonth)}-${months}m.md`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      status.textContent = `ファイルを保存しました。Claudeのチャットに添付して「分析してください」と送ってください。`;
+    });
+    outEl.addEventListener('focus', () => outEl.select());
   }
 
   function renderIncomeChart(monthIncomes) {
@@ -2431,6 +3021,7 @@
       assets = data.assets;
       if (!assets.rates) assets.rates = {};
       if (!assets.snapshots) assets.snapshots = {};
+      if (!assets.contrib || typeof assets.contrib !== 'object') assets.contrib = {};
     }
     if (data.classifyRules && typeof data.classifyRules === 'object') classifyRules = data.classifyRules;
     if (data.ui && typeof data.ui === 'object') {
@@ -3337,7 +3928,7 @@
     flow.items.splice(dropAbove ? tgtIdx : tgtIdx + 1, 0, src);
     saveFlow();
   }
-  let assets = { accounts: [], snapshots: {}, rates: {} };
+  let assets = { accounts: [], snapshots: {}, rates: {}, contrib: {} };
   let networthChart = null;
   let allocationChart = null;
   let flowChart = null;
@@ -3352,6 +3943,7 @@
       if (raw && Array.isArray(raw.accounts) && typeof raw.snapshots === 'object') {
         assets = raw;
         if (!assets.rates || typeof assets.rates !== 'object') assets.rates = {};
+        if (!assets.contrib || typeof assets.contrib !== 'object') assets.contrib = {};
         for (const a of assets.accounts) if (!CURRENCIES.includes(a.currency)) a.currency = 'JPY';
       }
     } catch {}
@@ -3413,6 +4005,106 @@
     saveAssets();
   }
 
+  // ---- 投資口座の入金額 (評価損益と分けるため) ----
+  function contribFor(accountId, monthKey) {
+    const c = assets.contrib && assets.contrib[monthKey];
+    return c && typeof c[accountId] === 'number' ? c[accountId] : 0;
+  }
+  function setContrib(accountId, monthKey, value) {
+    if (!assets.contrib || typeof assets.contrib !== 'object') assets.contrib = {};
+    if (!assets.contrib[monthKey]) assets.contrib[monthKey] = {};
+    if (Number.isFinite(value) && value !== 0) assets.contrib[monthKey][accountId] = Math.round(value * 100) / 100;
+    else delete assets.contrib[monthKey][accountId];
+    if (Object.keys(assets.contrib[monthKey]).length === 0) delete assets.contrib[monthKey];
+    saveAssets();
+  }
+  // 対象月より前に残高の記録がある口座か (今月追加した口座は増減を計算できない)
+  function hasHistoryBefore(accountId, monthKey) {
+    if (flow.zaikei && flow.zaikei.accountId === accountId && monthIdx(flow.zaikei.from) <= monthIdx(monthKey)) return true;
+    return Object.keys(assets.snapshots).some(k => k < monthKey && typeof assets.snapshots[k][accountId] === 'number');
+  }
+  // フローとストックの突合。
+  //   純資産の増減 = (収支 + 財形) − 使途不明金 + 投資の評価損益 + 為替の影響
+  //   使途不明金   = (収支 + 財形) − (預金の増減 + 投資への入金 − 負債の増減)   ※為替の影響を除く
+  function reconcile(monthKey) {
+    const prevKey = prevMonthKey(monthKey);
+    const r = { nwPrev: 0, nwCur: 0, cash: 0, investIn: 0, gain: 0, debt: 0, fx: 0, used: 0, newAcc: 0, noRate: 0, unfilled: 0, hasInvest: false, contribSet: false };
+    for (const a of assets.accounts) {
+      if (!hasHistoryBefore(a.id, monthKey)) { r.newAcc++; continue; }
+      const rP = getRate(a.currency, prevKey), rC = getRate(a.currency, monthKey);
+      if (rP === null || rC === null) { r.noRate++; continue; }
+      r.used++;
+      if (!hasBalance(a.id, monthKey)) r.unfilled++;
+      const bP = balanceFor(a.id, prevKey), bC = balanceFor(a.id, monthKey);
+      const d = bC - bP;
+      const sign = a.type === '負債' ? -1 : 1;
+      r.nwPrev += sign * bP * rP;
+      r.nwCur += sign * bC * rC;
+      r.fx += sign * bP * (rC - rP);
+      if (a.type === '投資') {
+        const c = contribFor(a.id, monthKey);
+        r.hasInvest = true;
+        if (c !== 0) r.contribSet = true;
+        r.investIn += c * rC;
+        r.gain += (d - c) * rC;
+      } else if (a.type === '預金') r.cash += d * rC;
+      else r.debt += d * rC;
+    }
+    const hasFlow = entries.some(e => e.date.startsWith(monthKey) && isFamily(e));
+    r.hasFlow = hasFlow;
+    r.net = monthlyNet(monthKey);
+    r.zaikei = zaikeiFor(monthKey);
+    r.income = entries.filter(e => e.date.startsWith(monthKey) && e.type === 'income' && isFamily(e)).reduce((s, e) => s + e.amount, 0);
+    r.saving = r.net + r.zaikei;
+    r.gap = r.saving - (r.cash + r.investIn - r.debt);
+    r.dNw = r.nwCur - r.nwPrev;
+    return r;
+  }
+  function renderReconcile(monthKey) {
+    document.getElementById('recon-month').textContent = monthLabel(viewMonth);
+    const body = document.getElementById('recon-body');
+    const hist = document.getElementById('recon-hist');
+    const r = reconcile(monthKey);
+    const yen = (v) => (v < 0 ? '-' : '') + fmt(Math.abs(v));
+    if (r.used === 0) {
+      body.innerHTML = `<div class="budget-empty">前月末と今月末の両方に残高がある口座がまだありません。2か月分の月末残高を入力すると突合できます。</div>`;
+      hist.innerHTML = '';
+      return;
+    }
+    const notes = [];
+    if (r.unfilled) notes.push(`今月末の残高が未入力の口座が ${r.unfilled} 件あります (前月末のままとして計算)。`);
+    if (r.newAcc) notes.push(`今月追加した口座 ${r.newAcc} 件は、前月末の残高がないため対象外です。`);
+    if (r.noRate) notes.push(`為替レート未設定の口座 ${r.noRate} 件は対象外です。`);
+    if (!r.hasFlow) notes.push('この月の収入・支出の明細がありません。');
+    if (r.hasInvest && !r.contribSet) notes.push('投資口座の入金額が未入力のため、投資口座の増減はすべて評価損益として扱っています。積立や買付をした月は、口座一覧で入金額を入力してください。');
+    const tol = Math.max(10000, Math.abs(r.income) * 0.02);
+    let verdict;
+    if (r.unfilled || !r.hasFlow) verdict = `<div class="recon-verdict">入力が揃っていないため参考値です。</div>`;
+    else if (Math.abs(r.gap) <= tol) verdict = `<div class="recon-verdict ok">✓ フローとストックはほぼ一致しています (差額 ${yen(r.gap)}、許容 ±${fmt(tol)})。</div>`;
+    else if (r.gap > 0) verdict = `<div class="recon-verdict ng">⚠ 家計簿上は ${fmt(r.saving)} 残るはずですが、ストックに現れているのは ${yen(r.saving - r.gap)} です。<b>${fmt(r.gap)}</b> の支出が記録されていないか、登録していない口座へお金が移っています。</div>`;
+    else verdict = `<div class="recon-verdict ng">⚠ ストックが家計簿の収支より <b>${fmt(-r.gap)}</b> 多く増えています。収入の記録漏れ、支出の二重計上、またはクレカ利用分の未払い (まだ引き落とされていない支出) が考えられます。</div>`;
+    body.innerHTML = `<table class="recon-table"><tbody>
+        <tr><td>前月末の純資産</td><td class="num">${yen(r.nwPrev)}</td></tr>
+        <tr><td>＋ 収支 (収入 − 支出)</td><td class="num">${signedYen(r.net)}</td></tr>
+        <tr><td>＋ 財形の天引き</td><td class="num">${signedYen(r.zaikei)}</td></tr>
+        <tr><td>＋ 投資の評価損益 <span class="act-sub" style="display:inline;">(入金額を除く)</span></td><td class="num">${signedYen(r.gain)}</td></tr>
+        <tr><td>＋ 為替の影響</td><td class="num">${signedYen(r.fx)}</td></tr>
+        <tr class="gap"><td>＋ 説明のつかない差額 <span class="act-sub" style="display:inline;">(使途不明金 ${yen(r.gap)})</span></td><td class="num">${signedYen(-r.gap)}</td></tr>
+        <tr class="total"><td>＝ 今月末の純資産 <span class="act-sub" style="display:inline;">(増減 ${signedYen(r.dNw)})</span></td><td class="num">${yen(r.nwCur)}</td></tr>
+      </tbody></table>
+      <div class="act-sub">内訳: 預金の増減 ${signedYen(r.cash)} ／ 投資への入金 ${signedYen(r.investIn)} ／ 負債の増減 ${signedYen(r.debt)} (いずれも為替の影響を除く)</div>
+      ${verdict}
+      ${notes.length ? `<div class="act-sub" style="margin-top:8px;">${notes.map(n => '・' + n).join('<br>')}</div>` : ''}`;
+    let rows = '';
+    for (let i = 5; i >= 0; i--) {
+      const k = addMonths(monthKey, -i);
+      const h = reconcile(k);
+      if (h.used === 0) continue;
+      rows += `<tr><td>${k.replace('-', '/')}</td><td>${signedYen(h.saving)}</td><td>${signedYen(h.gain)}</td><td>${signedYen(h.fx)}</td><td>${signedYen(h.dNw)}</td><td style="font-weight:700;${Math.abs(h.gap) > Math.max(10000, Math.abs(h.income) * 0.02) ? 'color:#b45309;' : ''}">${yen(h.gap)}</td></tr>`;
+    }
+    hist.innerHTML = rows ? `<table><thead><tr><th>月</th><th>収支+財形</th><th>評価損益</th><th>為替</th><th>純資産の増減</th><th>使途不明金</th></tr></thead><tbody>${rows}</tbody></table>` : '';
+  }
+
   function hasBalance(accountId, monthKey) {
     const snap = assets.snapshots[monthKey];
     return !!snap && typeof snap[accountId] === 'number';
@@ -3463,6 +4155,7 @@
   function deleteAccount(id) {
     assets.accounts = assets.accounts.filter(a => a.id !== id);
     for (const m in assets.snapshots) delete assets.snapshots[m][id];
+    for (const m in (assets.contrib || {})) delete assets.contrib[m][id];
     saveAssets();
   }
 
@@ -3570,7 +4263,7 @@
           if (!explicit && dp.cls === 'flat') deltaHtml = `<span class="delta pending">未入力</span>`;
           else if (dp.cls === 'flat') deltaHtml = `<span class="delta flat">±0</span>`;
           else deltaHtml = `<span class="delta ${dp.cls}">${dp.sign}${numComma(Math.abs(delta))}<small>${explicit ? dp.pct.trim() : '自動計上・未入力'}</small></span>`;
-          html += `<div class="account-row" draggable="true" data-acc-id="${a.id}" data-acc-type="${escapeHtml(a.type)}">
+          html += `<div class="account-row${a.type === '投資' ? ' has-sub' : ''}" draggable="true" data-acc-id="${a.id}" data-acc-type="${escapeHtml(a.type)}">
             <span class="drag-handle" title="ドラッグで並べ替え">⋮⋮</span>
             <span class="name">${escapeHtml(a.name)} <span class="currency-badge">${a.currency}</span>${flow.zaikei && flow.zaikei.accountId === a.id && flow.zaikei.amount > 0 ? ` <span class="currency-badge" title="給与天引き。実残高を入力すればその値で上書きされます">自動積立 +${numComma(flow.zaikei.amount)}/月</span>` : ''}</span>
             <span class="prev-end">${numComma(prevEnd)}</span>
@@ -3579,12 +4272,23 @@
             <span class="meta-col jpy-eq">${jpyLabel}</span>
             <button type="button" class="delete-btn" data-acc-delete="${a.id}" title="削除">×</button>
           </div>`;
+          if (a.type === '投資') {
+            const c = contribFor(a.id, monthKey);
+            const gain = delta - c;
+            const gcls = Math.abs(gain) < 0.005 ? '' : (gain > 0 ? 'good' : 'bad');
+            html += `<div class="acc-sub">
+              <label for="contrib-${a.id}" style="margin:0;">今月の入金額 (積立・買付。出金はマイナス)</label>
+              <input type="text" id="contrib-${a.id}" value="${c !== 0 ? numComma(c) : ''}" placeholder="0" data-acc-contrib="${a.id}" />
+              <span>→ 評価損益 <span class="${gcls}">${gain > 0 ? '+' : gain < 0 ? '-' : '±'}${numComma(Math.abs(gain))}</span></span>
+            </div>`;
+          }
         }
       }
       html += `</div>`;
     }
     listEl.innerHTML = html;
 
+    renderReconcile(monthKey);
     renderAllocationChart(totals);
     renderNetworthChart();
   }
@@ -3670,7 +4374,17 @@
     document.getElementById('flow-fixed-meta').textContent = `全体の ${pct(fixedTotal)}` + (b.allowance > 0 ? ` / うち小遣い ${fmt(b.allowance)}` : '');
     document.getElementById('flow-variable').textContent = fmt(variableTotal);
     document.getElementById('flow-variable-meta').textContent = `全体の ${pct(variableTotal)} ／ クレカ ${fmt(cardTotal)} + 手入力 ${fmt(manualTotal)} + 変動費項目 ${fmt(itemsTotal)}`;
-    document.getElementById('flow-fixed-month').textContent = monthLabel(viewMonth) + ' / 計 ' + fmt(fixedTotal);
+    document.getElementById('flow-fixed-month').textContent = monthLabel(viewMonth) + ' / 計 ' + fmt(fixedTotal) + ' / 年額 ' + fmt(fixedTotal * 12);
+    {
+      const nowIdx = monthIdx(ym(new Date()));
+      const active = fixedItems.filter(x => flowAmountFor(x.id, monthKey) > 0);
+      const stale = active.filter(x => !x.reviewed || nowIdx - monthIdx(x.reviewed) >= 12);
+      const staleSum = stale.reduce((s, x) => s + flowAmountFor(x.id, monthKey), 0);
+      document.getElementById('flow-fixed-review').innerHTML = active.length === 0
+        ? '固定費は一度下げると効果が毎月続きます。項目を追加すると、年額と最終見直し月を表示します。'
+        : `固定費は一度下げると効果が毎月続きます。契約内容や料金プランを確認したら「見直した」を押してください。` +
+          (stale.length ? ` <b style="color:#b45309;">未見直し・1年以上経過: ${stale.length}項目 (年額 ${fmt(staleSum * 12)})</b>` : ` <b style="color:var(--income);">全項目を1年以内に見直し済みです</b>`);
+    }
     document.getElementById('flow-variable-month').textContent = monthLabel(viewMonth) + ' / 項目計 ' + fmt(itemsTotal);
 
     const labels = ['クレカ', '手入力', '変動費項目', '固定費'];
@@ -3713,13 +4427,30 @@
       el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0;">項目はまだありません。下のフォームから追加してください。</div>`;
       return;
     }
-    el.innerHTML = items.map(it => `
+    const nowIdx = monthIdx(ym(new Date()));
+    el.innerHTML = items.map(it => {
+      const amt = flowAmountFor(it.id, monthKey);
+      let sub = '';
+      if (it.group === '固定費') {
+        const rv = /^\d{4}-\d{2}$/.test(it.reviewed || '') ? it.reviewed : null;
+        const age = rv ? nowIdx - monthIdx(rv) : null;
+        const status = !rv ? `<span class="stale">未見直し</span>`
+          : age >= 12 ? `<span class="stale">⚠ 最終見直し ${rv.replace('-', '/')} (1年以上前)</span>`
+          : `<span class="done">✓ 最終見直し ${rv.replace('-', '/')}</span>`;
+        const btn = rv && age === 0
+          ? `<button type="button" class="mini-btn" data-flow-review="${it.id}" data-undo="1">取消</button>`
+          : `<button type="button" class="mini-btn" data-flow-review="${it.id}">見直した</button>`;
+        sub = `<div class="flow-sub"><span>年額 ${fmt(amt * 12)}</span>${status}${btn}</div>`;
+      }
+      return `
       <div class="flow-item-row" draggable="true" data-flow-id="${it.id}" data-flow-group="${escapeHtml(it.group)}">
         <span class="drag-handle" title="ドラッグで並べ替え">⋮⋮</span>
         <input type="text" value="${escapeHtml(it.name)}" data-flow-name="${it.id}" />
-        <input type="text" inputmode="numeric" value="${numComma(flowAmountFor(it.id, monthKey))}" data-flow-amount="${it.id}" />
+        <input type="text" inputmode="numeric" value="${numComma(amt)}" data-flow-amount="${it.id}" />
         <button type="button" class="delete-btn" data-flow-delete="${it.id}" title="削除">×</button>
-      </div>`).join('');
+        ${sub}
+      </div>`;
+    }).join('');
   }
 
   function setupTabs() {
@@ -3741,6 +4472,13 @@
 
     // 今月末残高を直接入力 (増減は自動計算)。空欄にすると未入力(前月末を引継ぎ)に戻す
     document.getElementById('accounts-list').addEventListener('change', (e) => {
+      const cid = e.target.dataset.accContrib;
+      if (cid) {
+        const v = parseNumInput(String(e.target.value || '').trim());
+        if (Number.isFinite(v)) setContrib(cid, ym(viewMonth), v);
+        renderStock();
+        return;
+      }
       const id = e.target.dataset.accBalance;
       if (!id) return;
       const mk = ym(viewMonth);
@@ -3798,6 +4536,11 @@
       const mk = ym(viewMonth);
       setBalance(fromId, mk, balanceFor(fromId, mk) - amt);
       setBalance(toId, mk, balanceFor(toId, mk) + amt);
+      // 投資口座との振替は「入金額」にも反映 (評価損益と分けるため)
+      const fromAcc = assets.accounts.find(a => a.id === fromId);
+      const toAcc = assets.accounts.find(a => a.id === toId);
+      if (fromAcc && fromAcc.type === '投資') setContrib(fromId, mk, contribFor(fromId, mk) - amt);
+      if (toAcc && toAcc.type === '投資') setContrib(toId, mk, contribFor(toId, mk) + amt);
       document.getElementById('transfer-overlay').style.display = 'none';
       renderStock();
     });
@@ -3887,6 +4630,15 @@
         }
       });
       flowList.addEventListener('click', (e) => {
+        const rid = e.target.dataset.flowReview;
+        if (rid) {
+          const it = flow.items.find(x => x.id === rid);
+          if (it) {
+            if (e.target.dataset.undo) delete it.reviewed; else it.reviewed = ym(new Date());
+            saveFlow(); renderFlow();
+          }
+          return;
+        }
         const id = e.target.dataset.flowDelete;
         if (!id) return;
         const it = flow.items.find(x => x.id === id);
@@ -3961,6 +4713,8 @@
   entrySort.key = ui.entrySortKey || 'date';
   entrySort.dir = ui.entrySortDir || 'desc';
   setupTabs();
+  setupActions();
+  setupAnalysis();
   attachChipDrag('expense-chart-order');
   attachChipDrag('income-chart-order');
   document.getElementById('cattrend-mode').addEventListener('change', (e) => {
@@ -3972,7 +4726,7 @@
     renderCategoryTrend();
   });
   loadClassifyRules();
-  document.getElementById('date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('date').value = localToday();
   setType('income');
   render();
 </script>
